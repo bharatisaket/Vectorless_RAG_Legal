@@ -11,7 +11,7 @@ from langchain_core.messages import HumanMessage, SystemMessage
 PAGEINDEX_API_KEY = st.secrets["PAGEINDEX_API_KEY"]
 os.environ["GOOGLE_API_KEY"] = st.secrets["GEMINI_API_KEY"]
 
-llm = ChatGoogleGenerativeAI(model="gemini-1.5-pro", temperature=0.1)
+llm = ChatGoogleGenerativeAI(model="gemini-1.5-pro-latest", temperature=0.1)
 pi_client = PageIndexClient(api_key=PAGEINDEX_API_KEY)
 
 ALL_LAW_DOC_IDS = [
