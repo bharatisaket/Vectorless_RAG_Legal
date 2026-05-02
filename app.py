@@ -65,8 +65,7 @@ if prompt := st.chat_input("E.g., What is the penalty for mob lynching?"):
                 route_response = llm.invoke(routing_prompt)
                 
                 # Clean the response to ensure it's just pure JSON
-                cleaned_response = route_response.content.replace("
-```json", "").replace("```", "").strip()
+                cleaned_response = route_response.content.replace("```json", "").replace("```", "").strip()
                 selected_nodes = json.loads(cleaned_response)
                 
                 # STEP 3: Fetch the raw text for the specifically selected nodes
