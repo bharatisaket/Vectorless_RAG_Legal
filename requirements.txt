@@ -1,4 +1,5 @@
 streamlit
+pageindex
 requests
 google-generativeai
 langchain-google-genai
