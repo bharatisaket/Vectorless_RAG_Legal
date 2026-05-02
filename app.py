@@ -72,10 +72,20 @@ if prompt := st.chat_input("E.g., What is the penalty for mob lynching?"):
                 """
                 
                 route_response = llm.invoke(routing_prompt)
+                raw_content = route_response.content
                 
-                # Clean the response to ensure it's just pure JSON
-                cleaned_response = route_response.content.replace("```json", "").replace("```", "").strip()
-                selected_nodes = json.loads(cleaned_response)
+                # Scenario 1: LangChain returned a list of content blocks
+                if isinstance(raw_content, list) and len(raw_content) > 0 and isinstance(raw_content[0], dict) and "text" in raw_content[0]:
+                    raw_content = raw_content[0]["text"]
+                
+                # Parse the nodes based on what LangChain handed back
+                if isinstance(raw_content, list):
+                    # Scenario 2: Gemini auto-parsed the JSON into a Python list for us
+                    selected_nodes = raw_content
+                else:
+                    # Scenario 3: It's a normal string, so clean and parse it
+                    cleaned = raw_content.replace("```json", "").replace("```", "").strip()
+                    selected_nodes = json.loads(cleaned)
                 
                 # STEP 3: Fetch the raw text directly from our local mapping
                 for node_id in selected_nodes:
