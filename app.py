@@ -104,7 +104,13 @@ if prompt := st.chat_input("E.g., What is the penalty for mob lynching?"):
             ]
             
             final_response = llm.invoke(messages)
-            answer = final_response.content
+            raw_answer = final_response.content
+            
+            # Extract the actual text if LangChain wrapped it in a list with metadata
+            if isinstance(raw_answer, list) and len(raw_answer) > 0 and isinstance(raw_answer[0], dict) and "text" in raw_answer[0]:
+                answer = raw_answer[0]["text"]
+            else:
+                answer = str(raw_answer)
             
             # Display final answer
             message_placeholder.markdown(answer)
