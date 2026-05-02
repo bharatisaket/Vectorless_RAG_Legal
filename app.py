@@ -1,20 +1,19 @@
 import streamlit as st
 import os
 import json
+import copy
 from pageindex import PageIndexClient
+import pageindex.utils as utils
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_core.messages import HumanMessage, SystemMessage
 
 # --- 1. Configuration & Security ---
-# Pull keys securely from Streamlit Secrets
 PAGEINDEX_API_KEY = st.secrets["PAGEINDEX_API_KEY"]
 os.environ["GOOGLE_API_KEY"] = st.secrets["GEMINI_API_KEY"]
 
-# Initialize the Gemini Brain and the PageIndex Client
 llm = ChatGoogleGenerativeAI(model="gemini-1.5-pro", temperature=0.1)
 pi_client = PageIndexClient(api_key=PAGEINDEX_API_KEY)
 
-# The Document IDs for the BNS, BSA, and BNSS
 ALL_LAW_DOC_IDS = [
     "pi-cmoo3zavg011p01qr7mbgdtev", # BNS
     "pi-cmoo3z9av011n01qrcozuk72f", # BSA
@@ -48,11 +47,21 @@ if prompt := st.chat_input("E.g., What is the penalty for mob lynching?"):
             retrieved_texts = []
             
             for doc_id in ALL_LAW_DOC_IDS:
-                # STEP 1: Fetch the Tree Index (0 credits - you already paid to index this)
-                tree = pi_client.documents.get_tree(doc_id)
-                tree_json = tree.to_json()
+                # STEP 1: Fetch the Tree Index (Direct method on the client)
+                tree_response = pi_client.get_tree(doc_id, node_summary=True)
                 
-                # STEP 2: The Routing Prompt (Gemini reads the map and chooses the nodes)
+                # The API returns a dict with 'result', grab the actual tree
+                tree = tree_response.get("result", tree_response) if isinstance(tree_response, dict) else tree_response
+                
+                # Create a local map to look up node text instantly (Zero additional API calls)
+                node_mapping = utils.create_node_mapping(tree)
+                
+                # Remove the full text from a copy of the tree to save Gemini context tokens
+                clean_tree = copy.deepcopy(tree)
+                tree_without_text = utils.remove_fields(clean_tree, fields=['text'])
+                tree_json = json.dumps(tree_without_text)
+                
+                # STEP 2: The Routing Prompt
                 routing_prompt = f"""
                 Analyze this document tree and the user query.
                 Return ONLY a valid JSON array of the most relevant node IDs.
@@ -68,10 +77,10 @@ if prompt := st.chat_input("E.g., What is the penalty for mob lynching?"):
                 cleaned_response = route_response.content.replace("```json", "").replace("```", "").strip()
                 selected_nodes = json.loads(cleaned_response)
                 
-                # STEP 3: Fetch the raw text for the specifically selected nodes
+                # STEP 3: Fetch the raw text directly from our local mapping
                 for node_id in selected_nodes:
-                    node_data = pi_client.documents.get_node(doc_id, node_id)
-                    retrieved_texts.append(node_data.text)
+                    if node_id in node_mapping and 'text' in node_mapping[node_id]:
+                        retrieved_texts.append(node_mapping[node_id]['text'])
                     
             message_placeholder.markdown("Reasoning with Gemini...")
             
