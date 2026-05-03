@@ -11,6 +11,7 @@ from langchain_core.messages import HumanMessage, SystemMessage, AIMessage
 PAGEINDEX_API_KEY = st.secrets["PAGEINDEX_API_KEY"]
 os.environ["GOOGLE_API_KEY"] = st.secrets["GEMINI_API_KEY"]
 
+# Using Flash to stay within Free Tier limits 
 llm = ChatGoogleGenerativeAI(model="gemini-flash-latest", temperature=0.1)
 
 ALL_LAW_DOC_IDS = [
@@ -44,7 +45,7 @@ Include procedural classifications (e.g., Cognizable, Bailable, Triable by which
 Maintain a strictly formal, precise, and authoritative legal tone. Do not hallucinate outside the provided text. If the text does not contain the answer, explicitly state that it is not present in the codes.
 """
 
-# --- 2. Caching Engine (Fixing the Latency Crisis) ---
+# --- 2. Caching Engine ---
 @st.cache_data(show_spinner="Loading Legal Codes into memory...")
 def fetch_law_trees():
     pi_client = PageIndexClient(api_key=PAGEINDEX_API_KEY)
@@ -63,17 +64,21 @@ def fetch_law_trees():
 
 legal_trees = fetch_law_trees()
 
-# --- 3. UI Initialization ---
+# --- 3. UI Initialization & History Rendering ---
 st.set_page_config(page_title="Bharatiya Laws AI", page_icon="⚖️")
 st.title("Bharatiya Laws AI Assistant")
-st.caption("Powered by Vectorless RAG & Gemini 2.5 Pro")
+st.caption("Powered by Vectorless RAG & Gemini")
 
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
+# Update: Render chat history along with the saved expander context
 for message in st.session_state.messages:
     with st.chat_message(message["role"]):
         st.markdown(message["content"])
+        if "context" in message and message["context"]:
+            with st.expander("View Retrieved Legal Statutes"):
+                st.markdown(message["context"])
 
 # --- 4. Main Logic Loop ---
 if prompt := st.chat_input("E.g., What is the penalty for mob lynching?"):
@@ -87,14 +92,12 @@ if prompt := st.chat_input("E.g., What is the penalty for mob lynching?"):
             message_placeholder.markdown("Executing Vectorless Tree Search...")
             retrieved_texts = []
             
-            # Format recent chat history for the routing engine (Fixing Amnesia Step 1)
             chat_history_str = ""
-            history_subset = st.session_state.messages[-5:-1] # Grab the last 4 messages
+            history_subset = st.session_state.messages[-5:-1] 
             for msg in history_subset:
                 chat_history_str += f"{msg['role'].capitalize()}: {msg['content']}\n"
             
             for doc_id in ALL_LAW_DOC_IDS:
-                # Instantly load tree from cache
                 tree_data = legal_trees[doc_id]
                 tree_json = tree_data["tree_json"]
                 node_mapping = tree_data["mapping"]
@@ -133,7 +136,6 @@ if prompt := st.chat_input("E.g., What is the penalty for mob lynching?"):
             if not retrieved_texts:
                 context_text = "No specific statutes retrieved for this query."
             
-            # Construct the full memory array for Gemini (Fixing Amnesia Step 2)
             messages = [SystemMessage(content=SYSTEM_PROMPT)]
             
             for msg in st.session_state.messages[:-1]:
@@ -153,10 +155,25 @@ if prompt := st.chat_input("E.g., What is the penalty for mob lynching?"):
             else:
                 answer = str(raw_answer)
             
+            # Display final answer
             message_placeholder.markdown(answer)
-            st.session_state.messages.append({"role": "assistant", "content": answer})
+            
+            # Update: Render the expander for the current turn
+            with st.expander("View Retrieved Legal Statutes"):
+                st.markdown(context_text)
+            
+            # Update: Save the context in the session state so it persists
+            st.session_state.messages.append({
+                "role": "assistant", 
+                "content": answer,
+                "context": context_text
+            })
             
         except json.JSONDecodeError:
             st.error("Error: The routing engine failed to format the node IDs correctly.")
         except Exception as e:
-            st.error(f"Error executing Vectorless RAG: {e}")
+            error_message = str(e)
+            if "429" in error_message or "RESOURCE_EXHAUSTED" in error_message:
+                st.warning("⏳ The AI is currently handling too many requests. Please wait a moment and try again.")
+            else:
+                st.error(f"Error executing Vectorless RAG: {e}")
