@@ -104,7 +104,13 @@ if prompt := st.chat_input("E.g., What is the penalty for mob lynching?"):
                 
                 routing_prompt = f"""
                 Analyze this document tree, the conversation history, and the user's latest query.
-                Return ONLY a valid JSON array of the most relevant node IDs.
+                Return ONLY a valid JSON array of the most strictly relevant node IDs.
+                
+                CRITICAL INSTRUCTIONS:
+                1. ONLY select granular "leaf" nodes (specific Sections or Sub-sections).
+                2. NEVER select high-level "Chapter" or "Part" parent nodes (doing so will crash the system with too much text).
+                3. STRICT LIMIT: Return a maximum of 3 node IDs.
+                
                 Example: ["N001", "N003"]
                 
                 Conversation History:
