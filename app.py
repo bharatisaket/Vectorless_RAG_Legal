@@ -154,8 +154,7 @@ if prompt := st.chat_input("E.g., What is the penalty for mob lynching?"):
                 if isinstance(raw_content, list):
                     selected_nodes = raw_content
                 else:
-                    cleaned = raw_content.replace("```json", "").replace("
-```", "").strip()
+                    cleaned = raw_content.replace("```json", "").replace("```", "").strip()
                     selected_nodes = json.loads(cleaned) if cleaned else []
                 
                 selected_nodes = selected_nodes[:2] 
