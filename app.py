@@ -50,20 +50,20 @@ def fetch_law_trees():
 
 legal_trees = fetch_law_trees()
 
-# --- 3. PARALLEL ROUTING & DYNAMIC BUDGET HELPER ---
+# --- 3. PARALLEL ROUTING (NO LIMITS) ---
 def process_law_tree(doc_id, user_query, history_str):
-    """Executes tree search for a single document with a smart character budget."""
+    """Executes tree search. Grabs ALL relevant nodes without starving the AI."""
     tree_data = legal_trees[doc_id]
     tree_json = tree_data["tree_json"]
     node_mapping = tree_data["mapping"]
     
+    # UPDATE: Removed the artificial node limits entirely. Just block whole Chapters.
     routing_prompt = f"""
     Analyze the tree and query. Return a valid JSON array of the most relevant node IDs.
     
-    CRITICAL RULES:
+    CRITICAL RULE:
     1. NEVER select parent Chapters or Parts. Select ONLY specific Section or Schedule nodes.
-    2. ORDER MATTERS: You MUST order the array from most critical to least critical. 
-    3. Select up to 6 nodes to ensure you capture the core offence and procedures.
+    2. Select ALL nodes that directly pertain to the query to ensure a complete legal answer.
     
     Latest Query: {user_query}
     Conversation History: {history_str}
@@ -86,23 +86,11 @@ def process_law_tree(doc_id, user_query, history_str):
             selected_nodes = []
     
     extracted_texts = []
-    TOTAL_CHAR_BUDGET = 20000  # Smart safety net (approx 4,000 tokens)
-    current_char_count = 0
     
+    # UPDATE: Loop through all selected nodes and grab their full text. No budget.
     for node_id in selected_nodes:
         if node_id in node_mapping and 'text' in node_mapping[node_id]:
-            node_text = node_mapping[node_id]['text']
-            node_len = len(node_text)
-            
-            # If adding this node breaks the budget, stop reading lower-priority nodes
-            if current_char_count + node_len > TOTAL_CHAR_BUDGET:
-                # Failsafe: If even the first critical node is too massive, truncate it
-                if len(extracted_texts) == 0:
-                    extracted_texts.append(node_text[:TOTAL_CHAR_BUDGET] + "\n\n... [Text truncated to preserve system stability]")
-                break 
-                
-            extracted_texts.append(node_text)
-            current_char_count += node_len
+            extracted_texts.append(node_mapping[node_id]['text'])
             
     return extracted_texts
 
@@ -146,7 +134,6 @@ if prompt := st.chat_input("E.g., What is the penalty for mob lynching?"):
         message_placeholder = st.empty()
         
         try:
-            # Guardrail for non-legal queries
             if any(word in prompt.lower() for word in ["recipe", "weather", "movie", "song", "cake"]):
                  message_placeholder.markdown("I am a specialized Legal AI for the BNS, BSA, and BNSS. I cannot assist with non-legal queries.")
                  st.session_state.messages.append({"role": "assistant", "content": "I am a specialized Legal AI for the BNS, BSA, and BNSS. I cannot assist with non-legal queries."})
@@ -162,7 +149,6 @@ if prompt := st.chat_input("E.g., What is the penalty for mob lynching?"):
             
             active_doc_ids = [LAW_DOC_MAPPING[law] for law in selected_laws]
             
-            # --- THE PARALLEL THREAD POOL ENGINE ---
             with concurrent.futures.ThreadPoolExecutor() as executor:
                 future_to_doc = {executor.submit(process_law_tree, doc_id, prompt, chat_history_str): doc_id for doc_id in active_doc_ids}
                 
@@ -175,9 +161,15 @@ if prompt := st.chat_input("E.g., What is the penalty for mob lynching?"):
             
             message_placeholder.markdown("Reasoning with Gemini...")
             
+            # FULL context goes to the AI
             context_text = "\n\n".join(retrieved_texts)
             if not retrieved_texts:
                 context_text = "No specific statutes retrieved."
+            
+            # TRUNCATED context goes to the UI Expander
+            ui_display_text = context_text
+            if len(ui_display_text) > 5000:
+                ui_display_text = ui_display_text[:5000] + "\n\n***\n*... [Remaining text hidden for UI readability. The AI analyzed the complete legal text.]*"
             
             messages = [SystemMessage(content=SYSTEM_PROMPT)]
             for msg in st.session_state.messages[:-1]:
@@ -197,9 +189,9 @@ if prompt := st.chat_input("E.g., What is the penalty for mob lynching?"):
             message_placeholder.markdown(answer)
             
             with st.expander("View Retrieved Legal Statutes"):
-                st.markdown(context_text)
+                st.markdown(ui_display_text)
             
-            st.session_state.messages.append({"role": "assistant", "content": answer, "context": context_text})
+            st.session_state.messages.append({"role": "assistant", "content": answer, "context": ui_display_text})
             
         except Exception as e:
             error_message = str(e)
