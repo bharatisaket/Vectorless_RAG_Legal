@@ -50,16 +50,21 @@ def fetch_law_trees():
 
 legal_trees = fetch_law_trees()
 
-# --- 3. PARALLEL ROUTING HELPER FUNCTION ---
+# --- 3. PARALLEL ROUTING & DYNAMIC BUDGET HELPER ---
 def process_law_tree(doc_id, user_query, history_str):
-    """Executes the tree search for a single document. Designed to be run in a thread."""
+    """Executes tree search for a single document with a smart character budget."""
     tree_data = legal_trees[doc_id]
     tree_json = tree_data["tree_json"]
     node_mapping = tree_data["mapping"]
     
     routing_prompt = f"""
-    Analyze the tree and query. Return ONLY a valid JSON array of the 1 or 2 most relevant node IDs.
-    Rules: No chapters, max 2 nodes.
+    Analyze the tree and query. Return a valid JSON array of the most relevant node IDs.
+    
+    CRITICAL RULES:
+    1. NEVER select parent Chapters or Parts. Select ONLY specific Section or Schedule nodes.
+    2. ORDER MATTERS: You MUST order the array from most critical to least critical. 
+    3. Select up to 6 nodes to ensure you capture the core offence and procedures.
+    
     Latest Query: {user_query}
     Conversation History: {history_str}
     Tree: {tree_json}
@@ -80,15 +85,24 @@ def process_law_tree(doc_id, user_query, history_str):
         except:
             selected_nodes = []
     
-    selected_nodes = selected_nodes[:2] 
     extracted_texts = []
+    TOTAL_CHAR_BUDGET = 20000  # Smart safety net (approx 4,000 tokens)
+    current_char_count = 0
     
     for node_id in selected_nodes:
         if node_id in node_mapping and 'text' in node_mapping[node_id]:
             node_text = node_mapping[node_id]['text']
-            if len(node_text) > 4000:
-                node_text = node_text[:4000] + "...[Truncated]"
+            node_len = len(node_text)
+            
+            # If adding this node breaks the budget, stop reading lower-priority nodes
+            if current_char_count + node_len > TOTAL_CHAR_BUDGET:
+                # Failsafe: If even the first critical node is too massive, truncate it
+                if len(extracted_texts) == 0:
+                    extracted_texts.append(node_text[:TOTAL_CHAR_BUDGET] + "\n\n... [Text truncated to preserve system stability]")
+                break 
+                
             extracted_texts.append(node_text)
+            current_char_count += node_len
             
     return extracted_texts
 
@@ -132,7 +146,8 @@ if prompt := st.chat_input("E.g., What is the penalty for mob lynching?"):
         message_placeholder = st.empty()
         
         try:
-            if any(word in prompt.lower() for word in ["recipe", "weather", "movie", "song"]):
+            # Guardrail for non-legal queries
+            if any(word in prompt.lower() for word in ["recipe", "weather", "movie", "song", "cake"]):
                  message_placeholder.markdown("I am a specialized Legal AI for the BNS, BSA, and BNSS. I cannot assist with non-legal queries.")
                  st.session_state.messages.append({"role": "assistant", "content": "I am a specialized Legal AI for the BNS, BSA, and BNSS. I cannot assist with non-legal queries."})
                  st.stop()
@@ -149,10 +164,8 @@ if prompt := st.chat_input("E.g., What is the penalty for mob lynching?"):
             
             # --- THE PARALLEL THREAD POOL ENGINE ---
             with concurrent.futures.ThreadPoolExecutor() as executor:
-                # Launch all tree searches simultaneously
                 future_to_doc = {executor.submit(process_law_tree, doc_id, prompt, chat_history_str): doc_id for doc_id in active_doc_ids}
                 
-                # Gather the results as they finish
                 for future in concurrent.futures.as_completed(future_to_doc):
                     try:
                         result_texts = future.result()
