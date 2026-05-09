@@ -11,40 +11,25 @@ from langchain_core.messages import HumanMessage, SystemMessage, AIMessage
 PAGEINDEX_API_KEY = st.secrets["PAGEINDEX_API_KEY"]
 os.environ["GOOGLE_API_KEY"] = st.secrets["GEMINI_API_KEY"]
 
-# Locked into Flash for speed and Free Tier safety
+# LOCKED: Using your preferred model string
 llm = ChatGoogleGenerativeAI(model="gemini-flash-latest", temperature=0.1)
 
-# UPDATE: Replaced the raw list with a mapped dictionary for the UI
 LAW_DOC_MAPPING = {
     "Bharatiya Nyaya Sanhita (BNS) - Penal Code": "pi-cmoo3zavg011p01qr7mbgdtev",
     "Bharatiya Nagarik Suraksha Sanhita (BNSS) - Procedures": "pi-cmoo55m2w012301qrevyj12j4",
     "Bharatiya Sakshya Adhiniyam (BSA) - Evidence": "pi-cmoo3z9av011n01qrcozuk72f"
 }
 
-SYSTEM_PROMPT = """You are an elite Indian Legal AI Assistant specializing in the Bharatiya Nyaya Sanhita (BNS), Bharatiya Nagarik Suraksha Sanhita (BNSS), and Bharatiya Sakshya Adhiniyam (BSA). 
+SYSTEM_PROMPT = """You are an elite Indian Legal AI Assistant. 
+Your primary directive is to provide structured legal analysis based STRICTLY on the retrieved context. 
 
-Your primary directive is to provide highly structured, comprehensive, and perfectly formatted legal analysis based STRICTLY on the retrieved context. 
+Structure:
+1. Executive Summary
+2. Statutory Breakdown (with verbatim quotes)
+3. Summary Table
+4. Procedural & Legal Notes
 
-Whenever a user asks about an offence, penalty, procedure, or legal concept, you MUST format your response using the exact structure below:
-
-### 1. Executive Summary
-Provide a 1-2 sentence high-level overview of how the law treats the user's query.
-
-### 2. Statutory Breakdown
-For every relevant provision retrieved, you must clearly list:
-* **Law & Chapter:** (e.g., Bharatiya Nyaya Sanhita, 2023 - Chapter VI)
-* **Section:** (e.g., Section 103(2))
-* **Statutory Text:** "Extract and output the EXACT verbatim quote from the retrieved text inside quotation marks."
-* **Key Elements:** Provide a bulleted list breaking down the core ingredients of the offence.
-
-### 3. Summary Table
-Always include a clean Markdown table summarizing the core findings.
-
-### 4. Procedural & Legal Notes
-Include procedural classifications (e.g., Cognizable, Bailable, Triable by which court) and any significant legal context or schedules found in the text.
-
-Maintain a strictly formal, precise, and authoritative legal tone. Do not hallucinate outside the provided text. If the text does not contain the answer, explicitly state that it is not present in the codes.
-"""
+If the question is not related to Indian criminal law (BNS, BNSS, BSA), or if the answer is not in the text, politely state that you cannot assist with that specific query. Do not hallucinate."""
 
 # --- 2. Caching Engine ---
 @st.cache_data(show_spinner="Loading Legal Codes into memory...")
@@ -68,22 +53,19 @@ legal_trees = fetch_law_trees()
 # --- 3. UI Initialization & Sidebar ---
 st.set_page_config(page_title="Bharatiya Laws AI", page_icon="⚖️", layout="wide")
 
-# UPDATE: Building the Sidebar Controls
 with st.sidebar:
     st.header("⚖️ Search Scope")
-    st.markdown("Select which legal codes the AI should search:")
-    
     selected_laws = st.multiselect(
         "Active Databases:",
         options=list(LAW_DOC_MAPPING.keys()),
-        default=list(LAW_DOC_MAPPING.keys()) # All selected by default
+        default=list(LAW_DOC_MAPPING.keys())
     )
-    
     st.divider()
-    st.caption("Unchecking irrelevant codes improves AI speed and accuracy.")
+    # NEW: Legal Disclaimer in Sidebar
+    st.warning("**Disclaimer:** This tool is for informational purposes only. It is not a substitute for professional legal advice. AI can hallucinate.")
 
 st.title("Bharatiya Laws AI Assistant")
-st.caption("Powered by Vectorless RAG & Gemini 1.5 Flash")
+st.caption("Powered by Vectorless RAG & Gemini Flash")
 
 if "messages" not in st.session_state:
     st.session_state.messages = []
@@ -98,9 +80,8 @@ for message in st.session_state.messages:
 # --- 4. Main Logic Loop ---
 if prompt := st.chat_input("E.g., What is the penalty for mob lynching?"):
     
-    # Check if user unselected everything
     if not selected_laws:
-        st.warning("⚠️ Please select at least one legal code from the sidebar to search.")
+        st.warning("⚠️ Please select at least one legal code from the sidebar.")
         st.stop()
 
     st.chat_message("user").markdown(prompt)
@@ -110,6 +91,12 @@ if prompt := st.chat_input("E.g., What is the penalty for mob lynching?"):
         message_placeholder = st.empty()
         
         try:
+            # NEW: Basic Intent Guardrail
+            if any(word in prompt.lower() for word in ["recipe", "weather", "movie", "song"]):
+                 message_placeholder.markdown("I am a specialized Legal AI for the BNS, BSA, and BNSS. I cannot assist with non-legal queries.")
+                 st.session_state.messages.append({"role": "assistant", "content": "I am a specialized Legal AI for the BNS, BSA, and BNSS. I cannot assist with non-legal queries."})
+                 st.stop()
+
             message_placeholder.markdown("Executing Vectorless Tree Search...")
             retrieved_texts = []
             
@@ -118,7 +105,6 @@ if prompt := st.chat_input("E.g., What is the penalty for mob lynching?"):
             for msg in history_subset:
                 chat_history_str += f"{msg['role'].capitalize()}: {msg['content']}\n"
             
-            # UPDATE: Only loop through the laws the user selected in the sidebar
             active_doc_ids = [LAW_DOC_MAPPING[law] for law in selected_laws]
             
             for doc_id in active_doc_ids:
@@ -127,34 +113,24 @@ if prompt := st.chat_input("E.g., What is the penalty for mob lynching?"):
                 node_mapping = tree_data["mapping"]
                 
                 routing_prompt = f"""
-                You are a precise routing agent. Analyze the document tree and the user's latest query.
-                
-                TASK: Return ONLY a valid JSON array of the 1 or 2 most perfectly matched node IDs. 
-                
-                CRITICAL RULES:
-                1. DO NOT select more than 2 node IDs total. 
-                2. DO NOT select parent nodes (Chapters/Parts). Select only the specific Section nodes.
-                3. DO NOT select Schedule/Table nodes unless explicitly asked about bail or procedures.
-                
-                Example Output: ["N001", "N003"]
-                
-                Conversation History:
-                {chat_history_str}
-                
-                Tree: {tree_json}
+                Analyze the tree and query. Return ONLY a valid JSON array of the 1 or 2 most relevant node IDs.
+                Rules: No chapters, max 2 nodes.
                 Latest Query: {prompt}
+                Tree: {tree_json}
                 """
                 
                 route_response = llm.invoke(routing_prompt)
                 raw_content = route_response.content
                 
+                # Cleanup list/string logic
                 if isinstance(raw_content, list) and len(raw_content) > 0 and isinstance(raw_content[0], dict) and "text" in raw_content[0]:
                     raw_content = raw_content[0]["text"]
                 
                 if isinstance(raw_content, list):
                     selected_nodes = raw_content
                 else:
-                    cleaned = raw_content.replace("```json", "").replace("```", "").strip()
+                    cleaned = raw_content.replace("```json", "").replace("
+```", "").strip()
                     selected_nodes = json.loads(cleaned) if cleaned else []
                 
                 selected_nodes = selected_nodes[:2] 
@@ -163,29 +139,26 @@ if prompt := st.chat_input("E.g., What is the penalty for mob lynching?"):
                     if node_id in node_mapping and 'text' in node_mapping[node_id]:
                         node_text = node_mapping[node_id]['text']
                         if len(node_text) > 4000:
-                            node_text = node_text[:4000] + "\n\n... [Text truncated by system to prevent memory overflow] ..."
+                            node_text = node_text[:4000] + "...[Truncated]"
                         retrieved_texts.append(node_text)
                     
             message_placeholder.markdown("Reasoning with Gemini...")
             
             context_text = "\n\n".join(retrieved_texts)
             if not retrieved_texts:
-                context_text = "No specific statutes retrieved for this query. Ensure the correct legal code is selected in the sidebar."
+                context_text = "No specific statutes retrieved."
             
             messages = [SystemMessage(content=SYSTEM_PROMPT)]
-            
             for msg in st.session_state.messages[:-1]:
-                if msg["role"] == "user":
-                    messages.append(HumanMessage(content=msg["content"]))
-                else:
-                    messages.append(AIMessage(content=msg["content"]))
+                role_class = HumanMessage if msg["role"] == "user" else AIMessage
+                messages.append(role_class(content=msg["content"]))
                     
-            gemini_prompt = f"RETRIEVED LEGAL TEXT:\n{context_text}\n\nLATEST USER QUESTION:\n{prompt}"
-            messages.append(HumanMessage(content=gemini_prompt))
+            messages.append(HumanMessage(content=f"CONTEXT:\n{context_text}\n\nQUESTION:\n{prompt}"))
             
             final_response = llm.invoke(messages)
-            raw_answer = final_response.content
             
+            # Final output formatting fix
+            raw_answer = final_response.content
             if isinstance(raw_answer, list) and len(raw_answer) > 0 and isinstance(raw_answer[0], dict) and "text" in raw_answer[0]:
                 answer = raw_answer[0]["text"]
             else:
@@ -196,17 +169,7 @@ if prompt := st.chat_input("E.g., What is the penalty for mob lynching?"):
             with st.expander("View Retrieved Legal Statutes"):
                 st.markdown(context_text)
             
-            st.session_state.messages.append({
-                "role": "assistant", 
-                "content": answer,
-                "context": context_text
-            })
+            st.session_state.messages.append({"role": "assistant", "content": answer, "context": context_text})
             
-        except json.JSONDecodeError:
-            st.error("Error: The routing engine failed to format the node IDs correctly.")
         except Exception as e:
-            error_message = str(e)
-            if "429" in error_message or "RESOURCE_EXHAUSTED" in error_message:
-                st.warning("⏳ The AI is currently handling too many requests. Please wait a moment and try again.")
-            else:
-                st.error(f"Error executing Vectorless RAG: {e}")
+            st.error(f"Error: {e}")
