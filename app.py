@@ -11,14 +11,15 @@ from langchain_core.messages import HumanMessage, SystemMessage, AIMessage
 PAGEINDEX_API_KEY = st.secrets["PAGEINDEX_API_KEY"]
 os.environ["GOOGLE_API_KEY"] = st.secrets["GEMINI_API_KEY"]
 
-# Using Flash to stay within Free Tier limits 
-llm = ChatGoogleGenerativeAI(model="gemini-flash-latest", temperature=0.1)
+# Locked into Flash for speed and Free Tier safety
+llm = ChatGoogleGenerativeAI(model="gemini-1.5-flash", temperature=0.1)
 
-ALL_LAW_DOC_IDS = [
-    "pi-cmoo3zavg011p01qr7mbgdtev", # BNS
-    "pi-cmoo3z9av011n01qrcozuk72f", # BSA
-    "pi-cmoo55m2w012301qrevyj12j4"  # BNSS
-]
+# UPDATE: Replaced the raw list with a mapped dictionary for the UI
+LAW_DOC_MAPPING = {
+    "Bharatiya Nyaya Sanhita (BNS) - Penal Code": "pi-cmoo3zavg011p01qr7mbgdtev",
+    "Bharatiya Nagarik Suraksha Sanhita (BNSS) - Procedures": "pi-cmoo55m2w012301qrevyj12j4",
+    "Bharatiya Sakshya Adhiniyam (BSA) - Evidence": "pi-cmoo3z9av011n01qrcozuk72f"
+}
 
 SYSTEM_PROMPT = """You are an elite Indian Legal AI Assistant specializing in the Bharatiya Nyaya Sanhita (BNS), Bharatiya Nagarik Suraksha Sanhita (BNSS), and Bharatiya Sakshya Adhiniyam (BSA). 
 
@@ -50,7 +51,7 @@ Maintain a strictly formal, precise, and authoritative legal tone. Do not halluc
 def fetch_law_trees():
     pi_client = PageIndexClient(api_key=PAGEINDEX_API_KEY)
     cached_data = {}
-    for doc_id in ALL_LAW_DOC_IDS:
+    for doc_id in LAW_DOC_MAPPING.values():
         tree_response = pi_client.get_tree(doc_id, node_summary=True)
         tree = tree_response.get("result", tree_response) if isinstance(tree_response, dict) else tree_response
         node_mapping = utils.create_node_mapping(tree)
@@ -64,15 +65,29 @@ def fetch_law_trees():
 
 legal_trees = fetch_law_trees()
 
-# --- 3. UI Initialization & History Rendering ---
-st.set_page_config(page_title="Bharatiya Laws AI", page_icon="⚖️")
+# --- 3. UI Initialization & Sidebar ---
+st.set_page_config(page_title="Bharatiya Laws AI", page_icon="⚖️", layout="wide")
+
+# UPDATE: Building the Sidebar Controls
+with st.sidebar:
+    st.header("⚖️ Search Scope")
+    st.markdown("Select which legal codes the AI should search:")
+    
+    selected_laws = st.multiselect(
+        "Active Databases:",
+        options=list(LAW_DOC_MAPPING.keys()),
+        default=list(LAW_DOC_MAPPING.keys()) # All selected by default
+    )
+    
+    st.divider()
+    st.caption("Unchecking irrelevant codes improves AI speed and accuracy.")
+
 st.title("Bharatiya Laws AI Assistant")
-st.caption("Powered by Vectorless RAG & Gemini")
+st.caption("Powered by Vectorless RAG & Gemini 1.5 Flash")
 
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
-# Update: Render chat history along with the saved expander context
 for message in st.session_state.messages:
     with st.chat_message(message["role"]):
         st.markdown(message["content"])
@@ -82,6 +97,12 @@ for message in st.session_state.messages:
 
 # --- 4. Main Logic Loop ---
 if prompt := st.chat_input("E.g., What is the penalty for mob lynching?"):
+    
+    # Check if user unselected everything
+    if not selected_laws:
+        st.warning("⚠️ Please select at least one legal code from the sidebar to search.")
+        st.stop()
+
     st.chat_message("user").markdown(prompt)
     st.session_state.messages.append({"role": "user", "content": prompt})
 
@@ -97,21 +118,25 @@ if prompt := st.chat_input("E.g., What is the penalty for mob lynching?"):
             for msg in history_subset:
                 chat_history_str += f"{msg['role'].capitalize()}: {msg['content']}\n"
             
-            for doc_id in ALL_LAW_DOC_IDS:
+            # UPDATE: Only loop through the laws the user selected in the sidebar
+            active_doc_ids = [LAW_DOC_MAPPING[law] for law in selected_laws]
+            
+            for doc_id in active_doc_ids:
                 tree_data = legal_trees[doc_id]
                 tree_json = tree_data["tree_json"]
                 node_mapping = tree_data["mapping"]
                 
                 routing_prompt = f"""
-                Analyze this document tree, the conversation history, and the user's latest query.
-                Return ONLY a valid JSON array of the most strictly relevant node IDs.
+                You are a precise routing agent. Analyze the document tree and the user's latest query.
                 
-                CRITICAL INSTRUCTIONS:
-                1. ONLY select granular "leaf" nodes (specific Sections or Sub-sections).
-                2. NEVER select high-level "Chapter" or "Part" parent nodes (doing so will crash the system with too much text).
-                3. STRICT LIMIT: Return a maximum of 3 node IDs.
+                TASK: Return ONLY a valid JSON array of the 1 or 2 most perfectly matched node IDs. 
                 
-                Example: ["N001", "N003"]
+                CRITICAL RULES:
+                1. DO NOT select more than 2 node IDs total. 
+                2. DO NOT select parent nodes (Chapters/Parts). Select only the specific Section nodes.
+                3. DO NOT select Schedule/Table nodes unless explicitly asked about bail or procedures.
+                
+                Example Output: ["N001", "N003"]
                 
                 Conversation History:
                 {chat_history_str}
@@ -129,18 +154,24 @@ if prompt := st.chat_input("E.g., What is the penalty for mob lynching?"):
                 if isinstance(raw_content, list):
                     selected_nodes = raw_content
                 else:
-                    cleaned = raw_content.replace("```json", "").replace("```", "").strip()
+                    cleaned = raw_content.replace("```json", "").replace("
+```", "").strip()
                     selected_nodes = json.loads(cleaned) if cleaned else []
+                
+                selected_nodes = selected_nodes[:2] 
                 
                 for node_id in selected_nodes:
                     if node_id in node_mapping and 'text' in node_mapping[node_id]:
-                        retrieved_texts.append(node_mapping[node_id]['text'])
+                        node_text = node_mapping[node_id]['text']
+                        if len(node_text) > 4000:
+                            node_text = node_text[:4000] + "\n\n... [Text truncated by system to prevent memory overflow] ..."
+                        retrieved_texts.append(node_text)
                     
             message_placeholder.markdown("Reasoning with Gemini...")
             
             context_text = "\n\n".join(retrieved_texts)
             if not retrieved_texts:
-                context_text = "No specific statutes retrieved for this query."
+                context_text = "No specific statutes retrieved for this query. Ensure the correct legal code is selected in the sidebar."
             
             messages = [SystemMessage(content=SYSTEM_PROMPT)]
             
@@ -161,14 +192,11 @@ if prompt := st.chat_input("E.g., What is the penalty for mob lynching?"):
             else:
                 answer = str(raw_answer)
             
-            # Display final answer
             message_placeholder.markdown(answer)
             
-            # Update: Render the expander for the current turn
             with st.expander("View Retrieved Legal Statutes"):
                 st.markdown(context_text)
             
-            # Update: Save the context in the session state so it persists
             st.session_state.messages.append({
                 "role": "assistant", 
                 "content": answer,
