@@ -12,7 +12,7 @@ PAGEINDEX_API_KEY = st.secrets["PAGEINDEX_API_KEY"]
 os.environ["GOOGLE_API_KEY"] = st.secrets["GEMINI_API_KEY"]
 
 # Locked into Flash for speed and Free Tier safety
-llm = ChatGoogleGenerativeAI(model="gemini-1.5-flash", temperature=0.1)
+llm = ChatGoogleGenerativeAI(model="gemini-flash-latest", temperature=0.1)
 
 # UPDATE: Replaced the raw list with a mapped dictionary for the UI
 LAW_DOC_MAPPING = {
