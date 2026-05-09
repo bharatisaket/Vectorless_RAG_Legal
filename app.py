@@ -2,6 +2,7 @@ import streamlit as st
 import os
 import json
 import copy
+import concurrent.futures
 from pageindex import PageIndexClient
 import pageindex.utils as utils
 from langchain_google_genai import ChatGoogleGenerativeAI
@@ -11,7 +12,6 @@ from langchain_core.messages import HumanMessage, SystemMessage, AIMessage
 PAGEINDEX_API_KEY = st.secrets["PAGEINDEX_API_KEY"]
 os.environ["GOOGLE_API_KEY"] = st.secrets["GEMINI_API_KEY"]
 
-# LOCKED: Using your preferred model string
 llm = ChatGoogleGenerativeAI(model="gemini-flash-latest", temperature=0.1)
 
 LAW_DOC_MAPPING = {
@@ -50,7 +50,49 @@ def fetch_law_trees():
 
 legal_trees = fetch_law_trees()
 
-# --- 3. UI Initialization & Sidebar ---
+# --- 3. PARALLEL ROUTING HELPER FUNCTION ---
+def process_law_tree(doc_id, user_query, history_str):
+    """Executes the tree search for a single document. Designed to be run in a thread."""
+    tree_data = legal_trees[doc_id]
+    tree_json = tree_data["tree_json"]
+    node_mapping = tree_data["mapping"]
+    
+    routing_prompt = f"""
+    Analyze the tree and query. Return ONLY a valid JSON array of the 1 or 2 most relevant node IDs.
+    Rules: No chapters, max 2 nodes.
+    Latest Query: {user_query}
+    Conversation History: {history_str}
+    Tree: {tree_json}
+    """
+    
+    route_response = llm.invoke(routing_prompt)
+    raw_content = route_response.content
+    
+    if isinstance(raw_content, list) and len(raw_content) > 0 and isinstance(raw_content[0], dict) and "text" in raw_content[0]:
+        raw_content = raw_content[0]["text"]
+    
+    if isinstance(raw_content, list):
+        selected_nodes = raw_content
+    else:
+        cleaned = raw_content.replace("```json", "").replace("```", "").strip()
+        try:
+            selected_nodes = json.loads(cleaned) if cleaned else []
+        except:
+            selected_nodes = []
+    
+    selected_nodes = selected_nodes[:2] 
+    extracted_texts = []
+    
+    for node_id in selected_nodes:
+        if node_id in node_mapping and 'text' in node_mapping[node_id]:
+            node_text = node_mapping[node_id]['text']
+            if len(node_text) > 4000:
+                node_text = node_text[:4000] + "...[Truncated]"
+            extracted_texts.append(node_text)
+            
+    return extracted_texts
+
+# --- 4. UI Initialization & Sidebar ---
 st.set_page_config(page_title="Bharatiya Laws AI", page_icon="⚖️", layout="wide")
 
 with st.sidebar:
@@ -61,7 +103,6 @@ with st.sidebar:
         default=list(LAW_DOC_MAPPING.keys())
     )
     st.divider()
-    # NEW: Legal Disclaimer in Sidebar
     st.warning("**Disclaimer:** This tool is for informational purposes only. It is not a substitute for professional legal advice. AI can hallucinate.")
 
 st.title("Bharatiya Laws AI Assistant")
@@ -77,7 +118,7 @@ for message in st.session_state.messages:
             with st.expander("View Retrieved Legal Statutes"):
                 st.markdown(message["context"])
 
-# --- 4. Main Logic Loop ---
+# --- 5. Main Logic Loop ---
 if prompt := st.chat_input("E.g., What is the penalty for mob lynching?"):
     
     if not selected_laws:
@@ -91,13 +132,12 @@ if prompt := st.chat_input("E.g., What is the penalty for mob lynching?"):
         message_placeholder = st.empty()
         
         try:
-            # NEW: Basic Intent Guardrail
             if any(word in prompt.lower() for word in ["recipe", "weather", "movie", "song"]):
                  message_placeholder.markdown("I am a specialized Legal AI for the BNS, BSA, and BNSS. I cannot assist with non-legal queries.")
                  st.session_state.messages.append({"role": "assistant", "content": "I am a specialized Legal AI for the BNS, BSA, and BNSS. I cannot assist with non-legal queries."})
                  st.stop()
 
-            message_placeholder.markdown("Executing Vectorless Tree Search...")
+            message_placeholder.markdown("Executing Parallel Tree Search...")
             retrieved_texts = []
             
             chat_history_str = ""
@@ -107,40 +147,19 @@ if prompt := st.chat_input("E.g., What is the penalty for mob lynching?"):
             
             active_doc_ids = [LAW_DOC_MAPPING[law] for law in selected_laws]
             
-            for doc_id in active_doc_ids:
-                tree_data = legal_trees[doc_id]
-                tree_json = tree_data["tree_json"]
-                node_mapping = tree_data["mapping"]
+            # --- THE PARALLEL THREAD POOL ENGINE ---
+            with concurrent.futures.ThreadPoolExecutor() as executor:
+                # Launch all tree searches simultaneously
+                future_to_doc = {executor.submit(process_law_tree, doc_id, prompt, chat_history_str): doc_id for doc_id in active_doc_ids}
                 
-                routing_prompt = f"""
-                Analyze the tree and query. Return ONLY a valid JSON array of the 1 or 2 most relevant node IDs.
-                Rules: No chapters, max 2 nodes.
-                Latest Query: {prompt}
-                Tree: {tree_json}
-                """
-                
-                route_response = llm.invoke(routing_prompt)
-                raw_content = route_response.content
-                
-                # Cleanup list/string logic
-                if isinstance(raw_content, list) and len(raw_content) > 0 and isinstance(raw_content[0], dict) and "text" in raw_content[0]:
-                    raw_content = raw_content[0]["text"]
-                
-                if isinstance(raw_content, list):
-                    selected_nodes = raw_content
-                else:
-                    cleaned = raw_content.replace("```json", "").replace("```", "").strip()
-                    selected_nodes = json.loads(cleaned) if cleaned else []
-                
-                selected_nodes = selected_nodes[:2] 
-                
-                for node_id in selected_nodes:
-                    if node_id in node_mapping and 'text' in node_mapping[node_id]:
-                        node_text = node_mapping[node_id]['text']
-                        if len(node_text) > 4000:
-                            node_text = node_text[:4000] + "...[Truncated]"
-                        retrieved_texts.append(node_text)
-                    
+                # Gather the results as they finish
+                for future in concurrent.futures.as_completed(future_to_doc):
+                    try:
+                        result_texts = future.result()
+                        retrieved_texts.extend(result_texts)
+                    except Exception as exc:
+                        st.error(f"Routing error on one of the documents: {exc}")
+            
             message_placeholder.markdown("Reasoning with Gemini...")
             
             context_text = "\n\n".join(retrieved_texts)
@@ -156,7 +175,6 @@ if prompt := st.chat_input("E.g., What is the penalty for mob lynching?"):
             
             final_response = llm.invoke(messages)
             
-            # Final output formatting fix
             raw_answer = final_response.content
             if isinstance(raw_answer, list) and len(raw_answer) > 0 and isinstance(raw_answer[0], dict) and "text" in raw_answer[0]:
                 answer = raw_answer[0]["text"]
@@ -171,4 +189,8 @@ if prompt := st.chat_input("E.g., What is the penalty for mob lynching?"):
             st.session_state.messages.append({"role": "assistant", "content": answer, "context": context_text})
             
         except Exception as e:
-            st.error(f"Error: {e}")
+            error_message = str(e)
+            if "429" in error_message or "RESOURCE_EXHAUSTED" in error_message:
+                st.warning("⏳ The AI is currently handling too many requests. Please wait a moment and try again.")
+            else:
+                st.error(f"Error: {e}")
