@@ -165,7 +165,22 @@ st.markdown("""
         border-color: #2563EB; color: #2563EB; background-color: #F8FAFC;
         box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1); transform: translateY(-1px);
     }
-    
+    /* Primary Action CTA (Download Button) */
+    [data-testid="stDownloadButton"] > button {
+        border-radius: 24px;
+        background-color: #10B981;
+        color: white;
+        border: none;
+        font-weight: 600;
+        transition: all 0.2s ease-in-out;
+        box-shadow: 0 4px 6px -1px rgba(16, 185, 129, 0.2);
+    }
+    [data-testid="stDownloadButton"] > button:hover {
+        background-color: #059669;
+        color: white;
+        transform: translateY(-2px);
+        box-shadow: 0 6px 8px -1px rgba(16, 185, 129, 0.3);
+    }
     /* Chat Bubbles */
     [data-testid="stChatMessage"] { border-radius: 12px; padding: 15px; margin-bottom: 20px; }
     [data-testid="stChatMessage"]:has([data-testid="chatAvatarIcon-assistant"]) {
@@ -405,22 +420,31 @@ if prompt:
 
 # --- CASE EXPORT (Main UI) ---
 if "messages" in st.session_state and len(st.session_state.messages) > 0:
-    st.markdown("<br><hr><br>", unsafe_allow_html=True)
+    st.markdown("<br><br>", unsafe_allow_html=True)
     
-    # Center the button nicely using columns
-    col1, col2, col3 = st.columns([1, 2, 1])
+    # 1. Build the text document cleanly
+    chat_export = "# ⚖️ LegalEdge India - Case Notes\n\n"
+    for msg in st.session_state.messages:
+        role = "🧑‍💼 User Query" if msg["role"] == "user" else "🤖 LegalEdge Analysis"
+        chat_export += f"### {role}\n{msg['content']}\n\n---\n\n"
+        
+    # 2. Create a crisp SaaS export card container
+    st.markdown("""
+    <div style="background: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 12px; padding: 25px; text-align: center; margin-top: 10px;">
+        <h3 style="color: #1E293B; font-size: 16px; margin-top: 0; font-weight: 600;">Research Session Complete</h3>
+        <p style="color: #64748B; font-size: 14px; margin-bottom: 25px;">Download a clean Markdown record of your query, statutory citations, and analysis.</p>
+    </div>
+    """, unsafe_allow_html=True)
+
+    # 3. Overlap the button slightly over the card for a connected UI feel
+    st.markdown("<div style='margin-top: -50px; position: relative; z-index: 10;'>", unsafe_allow_html=True)
+    col1, col2, col3 = st.columns([1, 1.5, 1])
     with col2:
-        chat_export = "# ⚖️ LegalEdge India - Case Notes\n\n"
-        for msg in st.session_state.messages:
-            # We don't want to export the raw HTML tree, just the text
-            if "html" not in msg: 
-                role = "🧑‍💼 User Query" if msg["role"] == "user" else "🤖 LegalEdge Analysis"
-                chat_export += f"### {role}\n{msg['content']}\n\n---\n\n"
-            
         st.download_button(
-            label="📄 Download Case Notes",
+            label="📥 Export Session Notes",
             data=chat_export,
             file_name="LegalEdge_Case_Notes.md",
             mime="text/markdown",
             use_container_width=True
         )
+    st.markdown("</div>", unsafe_allow_html=True)
