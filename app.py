@@ -117,22 +117,20 @@ def process_law_tree(doc_id, user_query, history_str):
 # --- 4. UI Initialization & Styling ---
 st.set_page_config(page_title="LegalEdge India", page_icon="⚖️", layout="wide")
 
-# --- CSS UI UPGRADE ---
+# --- CSS UI UPGRADE (Including New Chat Bubble Styles) ---
 st.markdown("""
 <style>
-    /* Import Modern Google Font */
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
     
     html, body, [class*="css"]  {
         font-family: 'Inter', sans-serif;
     }
     
-    /* Clean up the default Streamlit UI */
     #MainMenu {visibility: hidden;}
     footer {visibility: hidden;}
     header {visibility: hidden;}
     
-    /* Style the buttons to look like modern SaaS chips */
+    /* SaaS Buttons */
     div.stButton > button {
         border-radius: 24px;
         border: 1px solid #E5E7EB;
@@ -149,10 +147,36 @@ st.markdown("""
         box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
         transform: translateY(-1px);
     }
+    
+    /* Distinct Chat Bubbles */
+    [data-testid="stChatMessage"] {
+        border-radius: 12px;
+        padding: 15px;
+        margin-bottom: 20px;
+    }
+    /* AI Assistant Card Styling */
+    [data-testid="stChatMessage"]:has([data-testid="chatAvatarIcon-assistant"]) {
+        background-color: #FFFFFF;
+        border: 1px solid #F3F4F6;
+        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+    }
+    /* User Message Styling */
+    [data-testid="stChatMessage"]:has([data-testid="chatAvatarIcon-user"]) {
+        background-color: #F8FAFC;
+        border-left: 4px solid #2563EB;
+    }
 </style>
 """, unsafe_allow_html=True)
 
+# --- SIDEBAR LOGIC ---
 with st.sidebar:
+    # FEATURE 2: "New Case" Button to clear memory
+    if st.button("🗑️ Start New Case", use_container_width=True):
+        st.session_state.messages = []
+        st.session_state.starter_prompt = None
+        st.rerun()
+        
+    st.markdown("<br>", unsafe_allow_html=True)
     st.markdown("<h2 style='font-weight: 700; color: #1F2937;'>⚖️ Search Scope</h2>", unsafe_allow_html=True)
     st.markdown("<p style='color: #6B7280; font-size: 0.9em;'>Toggle active databases for your search:</p>", unsafe_allow_html=True)
     
@@ -168,16 +192,11 @@ with st.sidebar:
     st.divider()
     st.warning("**Disclaimer:** This tool is for informational purposes only. AI can make mistakes, so please verify important information.")
     
-    # --- SUBTLE DEVELOPER SIGNATURE ---
     st.markdown("""
     <div style='text-align: center; margin-top: 50px; font-size: 0.85em; color: #9CA3AF;'>
         <p>Built by <strong>Saket</strong></p>
-        <a href='https://github.com/bharatisaket' target='_blank' style='text-decoration: none; color: #6B7280; margin-right: 15px;'>
-            🐙 GitHub
-        </a>
-        <a href='https://www.linkedin.com/in/saket-bharati-2a615a148/' target='_blank' style='text-decoration: none; color: #6B7280;'>
-            💼 LinkedIn
-        </a>
+        <a href='YOUR_GITHUB_URL' target='_blank' style='text-decoration: none; color: #6B7280; margin-right: 15px;'>🐙 GitHub</a>
+        <a href='YOUR_LINKEDIN_URL' target='_blank' style='text-decoration: none; color: #6B7280;'>💼 LinkedIn</a>
     </div>
     """, unsafe_allow_html=True)
 
@@ -195,7 +214,7 @@ st.divider()
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
-# --- EMPTY STATE GREETING & MODERN CHIPS ---
+# --- EMPTY STATE GREETING & CHIPS ---
 if len(st.session_state.messages) == 0:
     st.markdown("<h3 style='text-align: center; color: #374151; padding-bottom: 10px; font-weight: 600;'>Where should we start?</h3>", unsafe_allow_html=True)
     
@@ -246,68 +265,73 @@ if prompt:
     st.session_state.messages.append({"role": "user", "content": prompt})
 
     with st.chat_message("assistant"):
-        message_placeholder = st.empty()
         badge_text = None
         
         try:
             if any(word in prompt.lower() for word in ["recipe", "weather", "movie", "song", "cake"]):
-                 message_placeholder.markdown("I am a specialized Legal AI for the BNS, BSA, and BNSS. I cannot assist with non-legal queries.")
+                 st.markdown("I am a specialized Legal AI for the BNS, BSA, and BNSS. I cannot assist with non-legal queries.")
                  st.session_state.messages.append({"role": "assistant", "content": "I am a specialized Legal AI for the BNS, BSA, and BNSS. I cannot assist with non-legal queries."})
                  st.stop()
 
-            message_placeholder.markdown("Analyzing legal context...")
-            smart_query = expand_query(prompt)
+            # FEATURE 1: The Sleek Expanding Status Widget
+            with st.status("Analyzing Legal Context...", expanded=True) as status:
+                st.write("🔍 Translating legacy codes to modern framework...")
+                smart_query = expand_query(prompt)
+                
+                st.write("📚 Searching active legal databases...")
+                retrieved_texts = []
+                direct_match_found = False
+                
+                chat_history_str = ""
+                for msg in st.session_state.messages[-5:-1]:
+                    chat_history_str += f"{msg['role'].capitalize()}: {msg['content']}\n"
+                
+                with concurrent.futures.ThreadPoolExecutor() as executor:
+                    future_to_doc = {executor.submit(process_law_tree, doc_id, smart_query, chat_history_str): doc_id for doc_id in selected_doc_ids}
+                    
+                    for future in concurrent.futures.as_completed(future_to_doc):
+                        try:
+                            texts, regex_flag = future.result()
+                            retrieved_texts.extend(texts)
+                            if regex_flag:
+                                direct_match_found = True
+                        except Exception as exc:
+                            st.error(f"Routing error: {exc}")
+                
+                st.write("🧠 Compiling legal response with Gemini...")
+                
+                context_text = "\n\n".join(retrieved_texts)
+                if not retrieved_texts:
+                    context_text = "No specific statutes retrieved."
+                
+                formatted_ui_text = ""
+                for text_block in retrieved_texts:
+                    formatted_ui_text += f"> {text_block}\n\n---\n\n"
+                    
+                if len(formatted_ui_text) > 5000:
+                    formatted_ui_text = formatted_ui_text[:5000] + "\n\n*... [Remaining text hidden for UI readability. The AI analyzed the complete legal text.]*"
+                if not retrieved_texts:
+                    formatted_ui_text = "No specific statutes retrieved."
+
+                messages = [SystemMessage(content=SYSTEM_PROMPT)]
+                for msg in st.session_state.messages[:-1]:
+                    role_class = HumanMessage if msg["role"] == "user" else AIMessage
+                    messages.append(role_class(content=msg["content"]))
+                
+                messages.append(HumanMessage(content=f"CONTEXT:\n{context_text}\n\nQUESTION:\n{smart_query}"))
+                
+                final_response = llm.invoke(messages)
+                
+                # Close the status widget smoothly
+                status.update(label="Analysis Complete", state="complete", expanded=False)
             
+            # --- Render Output ---
             if smart_query.lower() != prompt.lower():
                 st.caption(f"🔄 *Translated legacy query to modern framework:* {smart_query}")
-
-            message_placeholder.markdown("Executing Hybrid Tree Search...")
-            retrieved_texts = []
-            direct_match_found = False
-            
-            chat_history_str = ""
-            for msg in st.session_state.messages[-5:-1]:
-                chat_history_str += f"{msg['role'].capitalize()}: {msg['content']}\n"
-            
-            with concurrent.futures.ThreadPoolExecutor() as executor:
-                future_to_doc = {executor.submit(process_law_tree, doc_id, smart_query, chat_history_str): doc_id for doc_id in selected_doc_ids}
                 
-                for future in concurrent.futures.as_completed(future_to_doc):
-                    try:
-                        texts, regex_flag = future.result()
-                        retrieved_texts.extend(texts)
-                        if regex_flag:
-                            direct_match_found = True
-                    except Exception as exc:
-                        st.error(f"Routing error: {exc}")
-            
             if direct_match_found:
                 badge_text = "🎯 Direct Section Match Found"
                 st.success(badge_text)
-
-            message_placeholder.markdown("Reasoning with Gemini...")
-            
-            context_text = "\n\n".join(retrieved_texts)
-            if not retrieved_texts:
-                context_text = "No specific statutes retrieved."
-            
-            formatted_ui_text = ""
-            for text_block in retrieved_texts:
-                formatted_ui_text += f"> {text_block}\n\n---\n\n"
-                
-            if len(formatted_ui_text) > 5000:
-                formatted_ui_text = formatted_ui_text[:5000] + "\n\n*... [Remaining text hidden for UI readability. The AI analyzed the complete legal text.]*"
-            if not retrieved_texts:
-                formatted_ui_text = "No specific statutes retrieved."
-
-            messages = [SystemMessage(content=SYSTEM_PROMPT)]
-            for msg in st.session_state.messages[:-1]:
-                role_class = HumanMessage if msg["role"] == "user" else AIMessage
-                messages.append(role_class(content=msg["content"]))
-            
-            messages.append(HumanMessage(content=f"CONTEXT:\n{context_text}\n\nQUESTION:\n{smart_query}"))
-            
-            final_response = llm.invoke(messages)
             
             raw_answer = final_response.content
             if isinstance(raw_answer, list) and len(raw_answer) > 0 and isinstance(raw_answer[0], dict) and "text" in raw_answer[0]:
@@ -315,7 +339,7 @@ if prompt:
             else:
                 answer = str(raw_answer)
             
-            message_placeholder.markdown(answer)
+            st.markdown(answer)
             
             with st.expander("View Retrieved Legal Statutes"):
                 st.markdown(formatted_ui_text)
