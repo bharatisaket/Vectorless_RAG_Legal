@@ -287,7 +287,7 @@ if len(st.session_state.messages) == 0:
         if st.button("⚖️ Compare IPC & BNS", use_container_width=True): st.session_state.starter_prompt = "What is the difference between Murder under the old IPC and the new BNS?"
     with col3:
         if st.button("📖 Explain it Simply", use_container_width=True): st.session_state.starter_prompt = "Explain the rules for electronic evidence (BSA) as if I am a beginner."
-   with col4:
+    with col4:
         if st.button("🚨 Find Penalties", use_container_width=True): st.session_state.starter_prompt = "What is the penalty for creating a public nuisance under the new BNS?"
     st.markdown("<br>", unsafe_allow_html=True)
 
