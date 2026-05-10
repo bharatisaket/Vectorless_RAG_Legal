@@ -46,7 +46,7 @@ Unlike traditional RAG systems that put PDFs into a meat grinder, chop them into
    GEMINI_API_KEY = "your_google_gemini_key_here"
 
 4. Boot up the engine:
-
+```bash
   streamlit run app.py
  
    
