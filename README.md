@@ -43,7 +43,7 @@ Unlike traditional RAG systems that put PDFs into a meat grinder, chop them into
    Create a .streamlit/secrets.toml file in the root directory and add your keys:
 ```bash
    PAGEINDEX_API_KEY = "your_pageindex_key_here"
-   GEMINI_API_KEY = "your_google_gemini_key_here"
+   GEMINI_API_KEY = "your_google_gemini_key_here"```
 
 4. Boot up the engine:
 ```bash
