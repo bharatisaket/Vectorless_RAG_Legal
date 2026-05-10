@@ -13,6 +13,7 @@ from langchain_core.messages import HumanMessage, SystemMessage, AIMessage
 PAGEINDEX_API_KEY = st.secrets["PAGEINDEX_API_KEY"]
 os.environ["GOOGLE_API_KEY"] = st.secrets["GEMINI_API_KEY"]
 
+# UPDATE: Model changed to gemini-3.1-flash-lite per your specs
 llm = ChatGoogleGenerativeAI(model="gemini-3.1-flash-lite", temperature=0.1)
 
 LAW_DOC_MAPPING = {
@@ -21,16 +22,19 @@ LAW_DOC_MAPPING = {
     "BSA": {"name": "Bharatiya Sakshya Adhiniyam (BSA) - Evidence", "id": "pi-cmoo3z9av011n01qrcozuk72f"}
 }
 
-SYSTEM_PROMPT = """You are an elite Indian Legal AI Assistant. 
-Your primary directive is to provide structured legal analysis based STRICTLY on the retrieved context. 
+# --- THE ADAPTIVE SYSTEM PROMPT ---
+SYSTEM_PROMPT = """You are LegalEdge India, an elite Indian Legal AI Assistant. 
+Your primary directive is to provide accurate legal analysis based STRICTLY on the retrieved context. 
 
-Structure:
+DEFAULT STRUCTURE (For general legal questions):
 1. Executive Summary
 2. Statutory Breakdown (with verbatim quotes)
 3. Summary Table
-4. Procedural & Legal Notes
+4. Procedural Notes
 
-If the question is not related to Indian criminal law (BNS, BNSS, BSA), or if the answer is not in the text, politely state that you cannot assist with that specific query. Do not hallucinate."""
+FLEXIBILITY RULE: If the user explicitly asks for a different format (e.g., "Draft a legal notice", "Explain this to a beginner", "Compare these two sections"), abandon the default structure and format your response to best serve their specific request.
+
+If the question is not related to Indian criminal law (BNS, BNSS, BSA), politely state that you cannot assist. Do not hallucinate."""
 
 # --- 2. Caching Engine ---
 @st.cache_data(show_spinner="Loading Legal Codes into memory...")
@@ -133,19 +137,41 @@ with st.sidebar:
     if bnss_active: selected_doc_ids.append(LAW_DOC_MAPPING["BNSS"]["id"])
     if bsa_active: selected_doc_ids.append(LAW_DOC_MAPPING["BSA"]["id"])
 
+    # THE SOFTER DISCLAIMER
     st.divider()
-    st.warning("**Disclaimer:** This tool is for informational purposes only. It is not a substitute for professional legal advice. AI can hallucinate.")
+    st.warning("**Disclaimer:** This tool is for informational purposes only and is not a substitute for professional legal advice. AI can make mistakes, so please verify important information.")
 
-# UPDATE: New Modern SaaS Branding Header
 st.title("LegalEdge India")
 st.markdown("""
 **Your intelligent navigator for India's modern criminal laws.** Seamlessly search across the BNS, BNSS, and BSA. Ask complex legal questions, automatically translate legacy IPC/CrPC sections, and retrieve exact statutory citations in seconds.
 """)
-st.caption("⚙️ *Powered by Vectorless RAG & Gemini Flash*")
+st.caption("⚙️ *Powered by Vectorless RAG & Gemini Flash Lite*")
 st.divider()
 
 if "messages" not in st.session_state:
     st.session_state.messages = []
+
+# --- NEW: THE EMPTY STATE GREETING & CHIPS ---
+if len(st.session_state.messages) == 0:
+    st.markdown("<h3 style='text-align: center; color: #4B4B4B; padding-bottom: 20px;'>Hi! Where should we start?</h3>", unsafe_allow_html=True)
+    
+    # Create columns for our starter chips
+    col1, col2, col3, col4 = st.columns([1, 1, 1, 1])
+    
+    with col1:
+        if st.button("📝 Draft a Legal Notice", use_container_width=True):
+            st.session_state.starter_prompt = "Draft a formal legal notice based on BNS Section 316 (Cheating)."
+    with col2:
+        if st.button("⚖️ Compare IPC & BNS", use_container_width=True):
+            st.session_state.starter_prompt = "What is the difference between Murder under the old IPC and the new BNS?"
+    with col3:
+        if st.button("📖 Explain it Simply", use_container_width=True):
+            st.session_state.starter_prompt = "Explain the rules for electronic evidence (BSA) as if I am a beginner."
+    with col4:
+        if st.button("🚨 Find Penalties", use_container_width=True):
+            st.session_state.starter_prompt = "What is the specific penalty for mob lynching under the BNS?"
+    
+    st.divider()
 
 # Render chat history
 for message in st.session_state.messages:
@@ -157,8 +183,19 @@ for message in st.session_state.messages:
             with st.expander("View Retrieved Legal Statutes"):
                 st.markdown(message["context"])
 
+# --- INPUT HANDLING LOGIC ---
+user_input = st.chat_input("E.g., What is the penalty for IPC 420?")
+prompt = None
+
+# Check if a chip was clicked, otherwise use the text box
+if "starter_prompt" in st.session_state and st.session_state.starter_prompt is not None:
+    prompt = st.session_state.starter_prompt
+    st.session_state.starter_prompt = None # Clear it so it doesn't loop
+elif user_input:
+    prompt = user_input
+
 # --- 5. Main Logic Loop ---
-if prompt := st.chat_input("E.g., What is the penalty for IPC 420?"):
+if prompt:
     
     if not selected_doc_ids:
         st.warning("⚠️ Please select at least one legal code from the sidebar.")
