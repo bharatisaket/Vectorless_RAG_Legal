@@ -10,8 +10,14 @@ from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_core.messages import HumanMessage, SystemMessage, AIMessage
 
 # --- 1. Configuration & Security ---
-PAGEINDEX_API_KEY = st.secrets["PAGEINDEX_API_KEY"]
-os.environ["GOOGLE_API_KEY"] = st.secrets["GEMINI_API_KEY"]
+st.set_page_config(page_title="LegalEdge India", page_icon="⚖️", layout="wide")
+
+try:
+    PAGEINDEX_API_KEY = st.secrets["PAGEINDEX_API_KEY"]
+    os.environ["GOOGLE_API_KEY"] = st.secrets["GEMINI_API_KEY"]
+except KeyError:
+    st.error("Missing API Keys in secrets.toml.")
+    st.stop()
 
 llm = ChatGoogleGenerativeAI(model="gemini-3.1-flash-lite", temperature=0.1)
 
@@ -40,15 +46,18 @@ def fetch_law_trees():
     pi_client = PageIndexClient(api_key=PAGEINDEX_API_KEY)
     cached_data = {}
     for key, data in LAW_DOC_MAPPING.items():
-        tree_response = pi_client.get_tree(data["id"], node_summary=True)
-        tree = tree_response.get("result", tree_response) if isinstance(tree_response, dict) else tree_response
-        node_mapping = utils.create_node_mapping(tree)
-        clean_tree = copy.deepcopy(tree)
-        tree_without_text = utils.remove_fields(clean_tree, fields=['text'])
-        cached_data[data["id"]] = {
-            "mapping": node_mapping,
-            "tree_json": json.dumps(tree_without_text)
-        }
+        try:
+            tree_response = pi_client.get_tree(data["id"], node_summary=True)
+            tree = tree_response.get("result", tree_response) if isinstance(tree_response, dict) else tree_response
+            node_mapping = utils.create_node_mapping(tree)
+            clean_tree = copy.deepcopy(tree)
+            tree_without_text = utils.remove_fields(clean_tree, fields=['text'])
+            cached_data[data["id"]] = {
+                "mapping": node_mapping,
+                "tree_json": json.dumps(tree_without_text)
+            }
+        except Exception as e:
+            st.error(f"Error fetching {key}: {e}")
     return cached_data
 
 legal_trees = fetch_law_trees()
@@ -90,20 +99,21 @@ def process_law_tree(doc_id, doc_name, user_query, history_str):
     Latest Query: {user_query}
     Tree: {tree_json}
     """
-    route_response = llm.invoke(routing_prompt)
-    raw_content = route_response.content
-    
-    if isinstance(raw_content, list) and len(raw_content) > 0 and isinstance(raw_content[0], dict) and "text" in raw_content[0]:
-        raw_content = raw_content[0]["text"]
-    
-    if isinstance(raw_content, list):
-        selected_nodes = raw_content
-    else:
-        cleaned = raw_content.replace("```json", "").replace("```", "").strip()
-        try:
+    try:
+        route_response = llm.invoke(routing_prompt)
+        raw_content = route_response.content
+        
+        if isinstance(raw_content, list) and len(raw_content) > 0 and isinstance(raw_content[0], dict) and "text" in raw_content[0]:
+            raw_content = raw_content[0]["text"]
+        
+        if isinstance(raw_content, list):
+            selected_nodes = raw_content
+        else:
+            cleaned = raw_content.replace("```json", "").replace("```", "").strip()
             selected_nodes = json.loads(cleaned) if cleaned else []
-        except:
-            selected_nodes = []
+            
+    except Exception:
+        selected_nodes = []
     
     for node_id_key in selected_nodes:
         if node_id_key in node_mapping and 'text' in node_mapping[node_id_key]:
@@ -119,8 +129,6 @@ def process_law_tree(doc_id, doc_name, user_query, history_str):
             
     return unique_nodes, regex_matched
 
-# --- UPDATE: FLATTENED DIRECTORY TREE HTML ---
-# This generates the IDE-style tree but without formatting spaces so Streamlit doesn't break.
 def build_html_tree(retrieved_nodes):
     if not retrieved_nodes:
         return "<i>No specific statutes retrieved.</i>"
@@ -145,8 +153,6 @@ def build_html_tree(retrieved_nodes):
     return html
 
 # --- 4. UI Initialization & Styling ---
-st.set_page_config(page_title="LegalEdge India", page_icon="⚖️", layout="wide")
-
 st.markdown("""
 <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
@@ -165,22 +171,7 @@ st.markdown("""
         border-color: #2563EB; color: #2563EB; background-color: #F8FAFC;
         box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1); transform: translateY(-1px);
     }
-    /* Primary Action CTA (Download Button) */
-    [data-testid="stDownloadButton"] > button {
-        border-radius: 24px;
-        background-color: #10B981;
-        color: white;
-        border: none;
-        font-weight: 600;
-        transition: all 0.2s ease-in-out;
-        box-shadow: 0 4px 6px -1px rgba(16, 185, 129, 0.2);
-    }
-    [data-testid="stDownloadButton"] > button:hover {
-        background-color: #059669;
-        color: white;
-        transform: translateY(-2px);
-        box-shadow: 0 6px 8px -1px rgba(16, 185, 129, 0.3);
-    }
+    
     /* Chat Bubbles */
     [data-testid="stChatMessage"] { border-radius: 12px; padding: 15px; margin-bottom: 20px; }
     [data-testid="stChatMessage"]:has([data-testid="chatAvatarIcon-assistant"]) {
@@ -249,7 +240,6 @@ with st.sidebar:
     st.divider()
     st.warning("**Disclaimer:** This tool is for informational purposes only. AI can make mistakes, so please verify important information.")
     
-    # --- UPGRADED DEVELOPER SIGNATURE, PHONE & PRE-FILLED EMAIL ---
     st.markdown("""
     <div class='profile-footer'>
         <p class='profile-text'>Built by <strong>Saket</strong></p>
@@ -266,14 +256,7 @@ with st.sidebar:
                 <svg viewBox="0 0 24 24"><path d="M0 3v18h24v-18h-24zm21.518 2l-9.518 7.713-9.518-7.713h19.036zm-19.518 14v-11.817l10 8.104 10-8.104v11.817h-20z"/></svg>
                 Email
             </a>
-            <a href='tel:+918766623773' class='social-pill phone-pill'>
-                <svg viewBox="0 0 24 24"><path d="M20 22.621l-3.521-6.792c-.008.004-1.974.97-2.064 1.011-2.24 1.086-6.799-7.82-4.609-8.994l2.083-1.026-3.493-6.82c-2.106 1.039-8.938 4.8-6.68 11.225 4.24 12.028 17.027 12.446 20.707 10.113l2.423-1.189-4.846-7.528z"/></svg>
-                Call
-            </a>
         </div>
-        <a href="mailto:YOUR_EMAIL@gmail.com?subject=Feedback%20for%20LegalEdge%20India&body=Hi%20Saket%2C%0A%0AHere%20is%20my%20feedback%20on%20LegalEdge%20India%3A%0A%0A1.%20Bug%20%2F%20Legal%20Inaccuracy%20Found%3A%0A%5BDescribe%20issue%20here%5D%0A%0A2.%20Feature%20Request%3A%0A%5BWhat%20should%20be%20added%20next%3F%5D%0A%0A3.%20My%20Role%3A%0A%5BAdvocate%20%2F%20Student%20%2F%20Citizen%5D%0A%0AThanks%21" class='feedback-link'>
-            💡 Share Feedback or Suggestions
-        </a>
     </div>
     """, unsafe_allow_html=True)
 
@@ -418,33 +401,39 @@ if prompt:
             else:
                 st.error(f"Error: {e}")
 
-# --- CASE EXPORT (Main UI) ---
+# --- CASE EXPORT (Minimal HTML Document Style) ---
 if "messages" in st.session_state and len(st.session_state.messages) > 0:
-    st.markdown("<br><br>", unsafe_allow_html=True)
+    st.markdown("<br>", unsafe_allow_html=True)
     
-    # 1. Build the text document cleanly
-    chat_export = "# ⚖️ LegalEdge India - Case Notes\n\n"
+    html_export = """
+    <html><head><meta charset="utf-8">
+    <style>
+        body { font-family: 'Helvetica', 'Arial', sans-serif; line-height: 1.6; color: #1E293B; max-width: 800px; margin: 40px auto; padding: 20px; }
+        h2 { color: #0F172A; border-bottom: 2px solid #E2E8F0; padding-bottom: 10px; }
+        .user-query { background-color: #F1F5F9; padding: 15px; border-radius: 8px; margin-top: 20px; font-weight: bold; border-left: 4px solid #2563EB; }
+        .ai-response { margin-top: 15px; margin-bottom: 30px; }
+    </style>
+    </head><body>
+    <h2>⚖️ LegalEdge India - Official Case Notes</h2>
+    """
+    
     for msg in st.session_state.messages:
-        role = "🧑‍💼 User Query" if msg["role"] == "user" else "🤖 LegalEdge Analysis"
-        chat_export += f"### {role}\n{msg['content']}\n\n---\n\n"
-        
-    # 2. Create a crisp SaaS export card container
-    st.markdown("""
-    <div style="background: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 12px; padding: 25px; text-align: center; margin-top: 10px;">
-        <h3 style="color: #1E293B; font-size: 16px; margin-top: 0; font-weight: 600;">Research Session Complete</h3>
-        <p style="color: #64748B; font-size: 14px; margin-bottom: 25px;">Download a clean Markdown record of your query, statutory citations, and analysis.</p>
-    </div>
-    """, unsafe_allow_html=True)
+        if "html" not in msg:
+            content = msg.get('content', '').replace('\n', '<br>').replace('**', '')
+            if msg['role'] == 'user':
+                html_export += f"<div class='user-query'>🧑‍💼 Query: {content}</div>"
+            else:
+                html_export += f"<div class='ai-response'>🤖 <b>Analysis:</b><br><br>{content}</div><hr>"
+    
+    html_export += "</body></html>"
 
-    # 3. Overlap the button slightly over the card for a connected UI feel
-    st.markdown("<div style='margin-top: -50px; position: relative; z-index: 10;'>", unsafe_allow_html=True)
-    col1, col2, col3 = st.columns([1, 1.5, 1])
+    col1, col2 = st.columns([6, 2])
     with col2:
         st.download_button(
-            label="📥 Export Session Notes",
-            data=chat_export,
-            file_name="LegalEdge_Case_Notes.md",
-            mime="text/markdown",
-            use_container_width=True
+            label="📄 Save as Document",
+            data=html_export,
+            file_name="LegalEdge_Case_Notes.html",
+            mime="text/html",
+            use_container_width=True,
+            help="Downloads a styled HTML document. Open it and press Ctrl+P to easily print or save as a PDF."
         )
-    st.markdown("</div>", unsafe_allow_html=True)
