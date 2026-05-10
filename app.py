@@ -118,13 +118,12 @@ def process_law_tree(doc_id, user_query, history_str):
     return extracted_texts, regex_matched
 
 # --- 4. UI Initialization & Sidebar ---
-st.set_page_config(page_title="Bharatiya Laws AI", page_icon="⚖️", layout="wide")
+st.set_page_config(page_title="LegalEdge India", page_icon="⚖️", layout="wide")
 
 with st.sidebar:
     st.header("⚖️ Search Scope")
     st.markdown("Toggle active databases for your search:")
     
-    # UPDATE: Clean checkboxes with Acronyms, English utility, and hover-tooltips
     bns_active = st.checkbox("**BNS** (Penal Code)", value=True, help="Bharatiya Nyaya Sanhita")
     bnss_active = st.checkbox("**BNSS** (Criminal Procedures)", value=True, help="Bharatiya Nagarik Suraksha Sanhita")
     bsa_active = st.checkbox("**BSA** (Evidence Act)", value=True, help="Bharatiya Sakshya Adhiniyam")
@@ -137,8 +136,13 @@ with st.sidebar:
     st.divider()
     st.warning("**Disclaimer:** This tool is for informational purposes only. It is not a substitute for professional legal advice. AI can hallucinate.")
 
-st.title("Bharatiya Laws AI Assistant")
-st.caption("Powered by Vectorless RAG & Gemini Flash")
+# UPDATE: New Modern SaaS Branding Header
+st.title("LegalEdge India")
+st.markdown("""
+**Your intelligent navigator for India's modern criminal laws.** Seamlessly search across the BNS, BNSS, and BSA. Ask complex legal questions, automatically translate legacy IPC/CrPC sections, and retrieve exact statutory citations in seconds.
+""")
+st.caption("⚙️ *Powered by Vectorless RAG & Gemini Flash*")
+st.divider()
 
 if "messages" not in st.session_state:
     st.session_state.messages = []
@@ -209,7 +213,6 @@ if prompt := st.chat_input("E.g., What is the penalty for IPC 420?"):
             if not retrieved_texts:
                 context_text = "No specific statutes retrieved."
             
-            # Format the UI text as clean Markdown Blockquotes
             formatted_ui_text = ""
             for text_block in retrieved_texts:
                 formatted_ui_text += f"> {text_block}\n\n---\n\n"
