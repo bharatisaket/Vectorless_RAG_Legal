@@ -16,9 +16,9 @@ os.environ["GOOGLE_API_KEY"] = st.secrets["GEMINI_API_KEY"]
 llm = ChatGoogleGenerativeAI(model="gemini-3.1-flash-lite", temperature=0.1)
 
 LAW_DOC_MAPPING = {
-    "BNS": {"name": "Bharatiya Nyaya Sanhita (BNS)", "id": "pi-cmoo3zavg011p01qr7mbgdtev"},
-    "BNSS": {"name": "Bharatiya Nagarik Suraksha Sanhita (BNSS)", "id": "pi-cmoo55m2w012301qrevyj12j4"},
-    "BSA": {"name": "Bharatiya Sakshya Adhiniyam (BSA)", "id": "pi-cmoo3z9av011n01qrcozuk72f"}
+    "BNS": {"name": "Bharatiya Nyaya Sanhita (BNS) - Penal Code", "id": "pi-cmoo3zavg011p01qr7mbgdtev"},
+    "BNSS": {"name": "Bharatiya Nagarik Suraksha Sanhita (BNSS) - Procedures", "id": "pi-cmoo55m2w012301qrevyj12j4"},
+    "BSA": {"name": "Bharatiya Sakshya Adhiniyam (BSA) - Evidence", "id": "pi-cmoo3z9av011n01qrcozuk72f"}
 }
 
 SYSTEM_PROMPT = """You are LegalEdge India, an elite Indian Legal AI Assistant. 
@@ -119,7 +119,8 @@ def process_law_tree(doc_id, doc_name, user_query, history_str):
             
     return unique_nodes, regex_matched
 
-# --- UPDATE: The Flattened Accordion HTML Generator ---
+# --- UPDATE: FLATTENED DIRECTORY TREE HTML ---
+# This generates the IDE-style tree but without formatting spaces so Streamlit doesn't break.
 def build_html_tree(retrieved_nodes):
     if not retrieved_nodes:
         return "<i>No specific statutes retrieved.</i>"
@@ -131,27 +132,21 @@ def build_html_tree(retrieved_nodes):
             grouped[doc] = []
         grouped[doc].append(node["text"])
         
-    html = "<div class='legal-accordion'>"
+    html = "<ul class='legal-dir-tree'>"
     for doc, texts in grouped.items():
-        # Act Level (Root Card) - Flattened to avoid Markdown code-block rendering
-        html += f"<details class='act-group' open><summary class='act-header'><span class='act-title'>{doc}</span><span class='chevron'></span></summary><div class='act-body'>"
-        
+        html += f"<li><details open><summary>📁 <strong>{doc}</strong></summary><ul>"
         for text in texts:
             first_line = text.split('\n')[0].strip()
             title = first_line if len(first_line) < 65 else first_line[:65] + "..."
             clean_text = text.replace('\n', '<br>')
-            
-            # Section Level (Nested Card) - Flattened
-            html += f"<details class='section-item'><summary class='section-header'><span class='section-title'>{title}</span><span class='chevron'></span></summary><div class='section-text'>{clean_text}</div></details>"
-            
-        html += "</div></details>"
-    html += "</div>"
+            html += f"<li><details><summary>📄 {title}</summary><div class='dir-tree-leaf'>{clean_text}</div></details></li>"
+        html += "</ul></details></li>"
+    html += "</ul>"
     return html
 
 # --- 4. UI Initialization & Styling ---
 st.set_page_config(page_title="LegalEdge India", page_icon="⚖️", layout="wide")
 
-# --- CSS UI UPGRADE (Modern Nested Accordion) ---
 st.markdown("""
 <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
@@ -180,60 +175,39 @@ st.markdown("""
         background-color: #F8FAFC; border-left: 4px solid #2563EB;
     }
 
-    /* --- THE MODERN ACCORDION CSS --- */
-    .legal-accordion details { margin: 0; padding: 0; }
-    .legal-accordion summary { list-style: none; outline: none; cursor: pointer; user-select: none; }
-    .legal-accordion summary::-webkit-details-marker { display: none; }
+    /* --- THE DIRECTORY TREE CSS --- */
+    .legal-dir-tree, .legal-dir-tree ul { list-style: none; padding-left: 22px; margin: 0; }
+    .legal-dir-tree { padding-left: 0; }
+    .legal-dir-tree li { position: relative; padding-top: 5px; padding-bottom: 5px; }
+    .legal-dir-tree li::before, .legal-dir-tree li::after { content: ''; position: absolute; left: -14px; }
+    .legal-dir-tree li::before { border-top: 1px solid #CBD5E1; top: 20px; width: 12px; height: 0; }
+    .legal-dir-tree li::after { border-left: 1px solid #CBD5E1; height: 100%; width: 0px; top: -5px; }
+    .legal-dir-tree ul > li:last-child::after { height: 25px; }
+    .legal-dir-tree details > summary::-webkit-details-marker { display: none; }
+    .legal-dir-tree details > summary { list-style: none; cursor: pointer; padding: 5px 8px; border-radius: 4px; font-size: 0.95em; color: #374151; transition: background-color 0.2s; }
+    .legal-dir-tree details > summary:hover { background-color: #F1F5F9; }
+    .dir-tree-leaf { margin-top: 5px; margin-bottom: 5px; padding: 12px; background-color: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 6px; font-size: 0.85em; color: #475569; line-height: 1.6; max-height: 300px; overflow-y: auto; }
 
-    /* Act Group (Outer Card) */
-    .act-group { 
-        margin-bottom: 16px; border: 1px solid #E2E8F0; border-radius: 12px; 
-        background: #FFFFFF; box-shadow: 0 1px 3px rgba(0,0,0,0.05); overflow: hidden; 
+    /* --- CTA PILLS CSS --- */
+    .profile-footer { text-align: center; margin-top: 35px; }
+    .profile-text { font-size: 0.85em; color: #64748B; margin-bottom: 12px; }
+    .social-pills { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; }
+    .social-pill {
+        display: inline-flex; align-items: center; gap: 6px;
+        padding: 6px 12px; border-radius: 20px;
+        font-size: 0.75em; font-weight: 600; text-decoration: none;
+        color: #475569; background: #FFFFFF; border: 1px solid #E2E8F0;
+        transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
     }
-    .act-header { 
-        display: flex; justify-content: space-between; align-items: center; 
-        padding: 16px 20px; background: #F8FAFC; transition: background 0.2s ease; 
-    }
-    .act-header:hover { background: #F1F5F9; }
-    details[open] > .act-header { border-bottom: 1px solid #E2E8F0; }
-    .act-title { font-weight: 700; color: #0F172A; font-size: 1.05em; display: flex; align-items: center; gap: 8px; }
-    .act-title::before { content: '🏛️'; }
+    .social-pill svg { width: 12px; height: 12px; fill: currentColor; }
+    
+    .github-pill:hover { background: #24292E; color: #FFFFFF; border-color: #24292E; transform: translateY(-2px); box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1); }
+    .linkedin-pill:hover { background: #0A66C2; color: #FFFFFF; border-color: #0A66C2; transform: translateY(-2px); box-shadow: 0 4px 6px -1px rgba(10, 102, 194, 0.2); }
+    .email-pill:hover { background: #EA4335; color: #FFFFFF; border-color: #EA4335; transform: translateY(-2px); box-shadow: 0 4px 6px -1px rgba(234, 67, 53, 0.2); }
+    .phone-pill:hover { background: #10B981; color: #FFFFFF; border-color: #10B981; transform: translateY(-2px); box-shadow: 0 4px 6px -1px rgba(16, 185, 129, 0.2); }
 
-    /* Section Item (Inner Toggles) */
-    .act-body { padding: 12px; background: #FAFAFA; }
-    .section-item { 
-        margin-bottom: 6px; border: 1px solid transparent; border-radius: 8px; 
-        transition: all 0.2s ease; 
-    }
-    .section-item:hover { 
-        border-color: #CBD5E1; background: #FFFFFF; box-shadow: 0 2px 4px rgba(0,0,0,0.02); 
-    }
-    .section-header { 
-        display: flex; justify-content: space-between; align-items: center; 
-        padding: 12px 16px; border-radius: 8px; transition: background 0.2s; 
-    }
-    .section-title { font-weight: 600; color: #334155; font-size: 0.95em; display: flex; align-items: center; gap: 8px; }
-    .section-title::before { content: '📄'; opacity: 0.8; font-size: 1.1em;}
-
-    /* The Legal Text Inset */
-    .section-text { 
-        margin: 4px 16px 16px 16px; padding: 16px 20px; background: #FFFFFF; 
-        border-left: 3px solid #3B82F6; border-radius: 0 8px 8px 0; 
-        color: #475569; font-size: 0.9em; line-height: 1.7; 
-        box-shadow: inset 0 0 0 1px #F1F5F9; max-height: 400px; overflow-y: auto; 
-    }
-
-    /* Animated Chevrons */
-    .chevron { 
-        width: 20px; height: 20px; display: inline-flex; align-items: center; justify-content: center; 
-        transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1); 
-    }
-    .chevron::after { 
-        content: ''; width: 7px; height: 7px; border-right: 2px solid #94A3B8; border-bottom: 2px solid #94A3B8; 
-        transform: rotate(45deg); margin-bottom: 4px; transition: border-color 0.2s; 
-    }
-    .act-header:hover .chevron::after, .section-header:hover .chevron::after { border-color: #3B82F6; }
-    details[open] > summary .chevron { transform: rotate(225deg); margin-top: 5px; }
+    .feedback-link { display: inline-block; margin-top: 18px; font-size: 0.75em; color: #94A3B8; text-decoration: none; transition: color 0.2s; }
+    .feedback-link:hover { color: #3B82F6; text-decoration: underline; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -260,11 +234,31 @@ with st.sidebar:
     st.divider()
     st.warning("**Disclaimer:** This tool is for informational purposes only. AI can make mistakes, so please verify important information.")
     
+    # --- UPGRADED DEVELOPER SIGNATURE, PHONE & PRE-FILLED EMAIL ---
     st.markdown("""
-    <div style='text-align: center; margin-top: 50px; font-size: 0.85em; color: #9CA3AF;'>
-        <p>Built by <strong>Saket</strong></p>
-        <a href='YOUR_GITHUB_URL' target='_blank' style='text-decoration: none; color: #6B7280; margin-right: 15px;'>🐙 GitHub</a>
-        <a href='YOUR_LINKEDIN_URL' target='_blank' style='text-decoration: none; color: #6B7280;'>💼 LinkedIn</a>
+    <div class='profile-footer'>
+        <p class='profile-text'>Built by <strong>Saket</strong></p>
+        <div class='social-pills'>
+            <a href='https://github.com/bharatisaket' target='_blank' class='social-pill github-pill'>
+                <svg viewBox="0 0 24 24"><path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/></svg>
+                GitHub
+            </a>
+            <a href='https://www.linkedin.com/in/saket-bharati-2a615a148/' target='_blank' class='social-pill linkedin-pill'>
+                <svg viewBox="0 0 24 24"><path d="M19 0h-14c-2.761 0-5 2.239-5 5v14c0 2.761 2.239 5 5 5h14c2.762 0 5-2.239 5-5v-14c0-2.761-2.238-5-5-5zm-11 19h-3v-11h3v11zm-1.5-12.268c-.966 0-1.75-.79-1.75-1.764s.784-1.764 1.75-1.764 1.75.79 1.75 1.764-.783 1.764-1.75 1.764zm13.5 12.268h-3v-5.604c0-3.368-4-3.113-4 0v5.604h-3v-11h3v1.765c1.396-2.586 7-2.777 7 2.476v6.759z"/></svg>
+                LinkedIn
+            </a>
+            <a href='mailto:bharatisaket@gmail.com?subject=LegalEdge%20India%20Inquiry' class='social-pill email-pill'>
+                <svg viewBox="0 0 24 24"><path d="M0 3v18h24v-18h-24zm21.518 2l-9.518 7.713-9.518-7.713h19.036zm-19.518 14v-11.817l10 8.104 10-8.104v11.817h-20z"/></svg>
+                Email
+            </a>
+            <a href='tel:+918766623773' class='social-pill phone-pill'>
+                <svg viewBox="0 0 24 24"><path d="M20 22.621l-3.521-6.792c-.008.004-1.974.97-2.064 1.011-2.24 1.086-6.799-7.82-4.609-8.994l2.083-1.026-3.493-6.82c-2.106 1.039-8.938 4.8-6.68 11.225 4.24 12.028 17.027 12.446 20.707 10.113l2.423-1.189-4.846-7.528z"/></svg>
+                Call
+            </a>
+        </div>
+        <a href="mailto:YOUR_EMAIL@gmail.com?subject=Feedback%20for%20LegalEdge%20India&body=Hi%20Saket%2C%0A%0AHere%20is%20my%20feedback%20on%20LegalEdge%20India%3A%0A%0A1.%20Bug%20%2F%20Legal%20Inaccuracy%20Found%3A%0A%5BDescribe%20issue%20here%5D%0A%0A2.%20Feature%20Request%3A%0A%5BWhat%20should%20be%20added%20next%3F%5D%0A%0A3.%20My%20Role%3A%0A%5BAdvocate%20%2F%20Student%20%2F%20Citizen%5D%0A%0AThanks%21" class='feedback-link'>
+            💡 Share Feedback or Suggestions
+        </a>
     </div>
     """, unsafe_allow_html=True)
 
