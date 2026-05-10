@@ -67,7 +67,6 @@ def expand_query(user_input):
     except:
         return user_input
 
-# UPDATE: We now pass doc_name so we know which Act the text belongs to
 def process_law_tree(doc_id, doc_name, user_query, history_str):
     tree_data = legal_trees[doc_id]
     tree_json = tree_data["tree_json"]
@@ -111,7 +110,6 @@ def process_law_tree(doc_id, doc_name, user_query, history_str):
             node_text = node_mapping[node_id_key]['text']
             extracted_nodes.append({"doc_name": doc_name, "text": node_text})
             
-    # Deduplicate nodes to avoid showing the same section twice
     seen = set()
     unique_nodes = []
     for n in extracted_nodes:
@@ -121,12 +119,11 @@ def process_law_tree(doc_id, doc_name, user_query, history_str):
             
     return unique_nodes, regex_matched
 
-# NEW HELPER: Generates the HTML Interactive Tree
+# --- UPDATE: The Authentic Directory Tree HTML Generator ---
 def build_html_tree(retrieved_nodes):
     if not retrieved_nodes:
         return "<i>No specific statutes retrieved.</i>"
         
-    # Group the nodes by their Document Name (Root)
     grouped = {}
     for node in retrieved_nodes:
         doc = node["doc_name"]
@@ -134,25 +131,31 @@ def build_html_tree(retrieved_nodes):
             grouped[doc] = []
         grouped[doc].append(node["text"])
         
-    html = "<div class='legal-tree-container'>"
+    html = "<ul class='legal-dir-tree'>"
     for doc, texts in grouped.items():
-        html += f"<details class='tree-doc'><summary>📚 <strong>{doc}</strong></summary><div class='tree-content'>"
+        # Root Folder
+        html += f"<li><details open><summary>📁 <strong>{doc}</strong></summary><ul>"
         for text in texts:
-            # Extract a short title (e.g., "Section 63...") from the first line
             first_line = text.split('\n')[0].strip()
             title = first_line if len(first_line) < 65 else first_line[:65] + "..."
-            
-            # Preserve formatting for the HTML block
             clean_text = text.replace('\n', '<br>')
-            html += f"<details class='tree-node'><summary>📄 {title}</summary><div class='tree-text'>{clean_text}</div></details>"
-        html += "</div></details>"
-    html += "</div>"
+            
+            # Child File
+            html += f"""
+            <li>
+                <details>
+                    <summary>📄 {title}</summary>
+                    <div class='dir-tree-leaf'>{clean_text}</div>
+                </details>
+            </li>"""
+        html += "</ul></details></li>"
+    html += "</ul>"
     return html
 
 # --- 4. UI Initialization & Styling ---
 st.set_page_config(page_title="LegalEdge India", page_icon="⚖️", layout="wide")
 
-# --- CSS UI UPGRADE (Added Tree Styles) ---
+# --- CSS UI UPGRADE (Added Authentic Directory Tree CSS) ---
 st.markdown("""
 <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
@@ -181,20 +184,74 @@ st.markdown("""
         background-color: #F8FAFC; border-left: 4px solid #2563EB;
     }
 
-    /* INTERACTIVE HTML TREE CSS */
-    .tree-doc { border: 1px solid #E5E7EB; border-radius: 8px; margin-bottom: 10px; background-color: #FFFFFF; overflow: hidden; }
-    .tree-doc > summary { padding: 12px 15px; background-color: #F8FAFC; cursor: pointer; color: #1F2937; list-style: none; }
-    .tree-doc > summary:hover { background-color: #F1F5F9; }
-    .tree-content { padding: 10px; border-top: 1px solid #E5E7EB; }
-    
-    .tree-node { margin-bottom: 8px; border: 1px solid #F3F4F6; border-radius: 6px; }
-    .tree-node > summary { padding: 10px 12px; font-size: 0.95em; font-weight: 500; background-color: #FFFFFF; cursor: pointer; color: #374151; list-style: none; }
-    .tree-node > summary:hover { background-color: #F9FAFB; }
-    .tree-text { padding: 15px; font-size: 0.9em; color: #4B5563; background-color: #FAFAFA; border-top: 1px solid #F3F4F6; line-height: 1.6; }
-    
-    /* Custom Arrow for Tree */
-    details summary::before { content: '▶'; display: inline-block; margin-right: 10px; font-size: 0.8em; transition: transform 0.2s; color: #9CA3AF; }
-    details[open] > summary::before { transform: rotate(90deg); }
+    /* --- THE DIRECTORY TREE CSS --- */
+    .legal-dir-tree, .legal-dir-tree ul {
+        list-style: none;
+        padding-left: 22px;
+        margin: 0;
+    }
+    .legal-dir-tree {
+        padding-left: 0;
+    }
+    .legal-dir-tree li {
+        position: relative;
+        padding-top: 5px;
+        padding-bottom: 5px;
+    }
+    /* Draw the vertical and horizontal connector lines */
+    .legal-dir-tree li::before, .legal-dir-tree li::after {
+        content: '';
+        position: absolute;
+        left: -14px;
+    }
+    /* Horizontal line pointing to the item */
+    .legal-dir-tree li::before {
+        border-top: 1px solid #CBD5E1; /* Light grey connecting line */
+        top: 20px; 
+        width: 12px;
+        height: 0;
+    }
+    /* Vertical line dropping down from the parent */
+    .legal-dir-tree li::after {
+        border-left: 1px solid #CBD5E1; 
+        height: 100%;
+        width: 0px;
+        top: -5px;
+    }
+    /* Stop the vertical line on the last item so it doesn't hang down */
+    .legal-dir-tree ul > li:last-child::after {
+        height: 25px; 
+    }
+    /* Hide the default triangle arrow on details summary */
+    .legal-dir-tree details > summary::-webkit-details-marker {
+        display: none;
+    }
+    .legal-dir-tree details > summary {
+        list-style: none; /* For newer browsers to hide the arrow */
+        cursor: pointer;
+        padding: 5px 8px;
+        border-radius: 4px;
+        font-size: 0.95em;
+        color: #374151;
+        transition: background-color 0.2s;
+    }
+    .legal-dir-tree details > summary:hover {
+        background-color: #F1F5F9;
+    }
+    /* The actual text content inside the file */
+    .dir-tree-leaf {
+        margin-top: 5px;
+        margin-bottom: 5px;
+        padding: 12px;
+        background-color: #F8FAFC;
+        border: 1px solid #E2E8F0;
+        border-radius: 6px;
+        font-size: 0.85em;
+        color: #475569;
+        line-height: 1.6;
+        max-height: 300px;
+        overflow-y: auto;
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -299,7 +356,7 @@ if prompt:
                 smart_query = expand_query(prompt)
                 
                 st.write("📚 Searching active legal databases...")
-                retrieved_nodes = [] # Now a list of dicts!
+                retrieved_nodes = [] 
                 direct_match_found = False
                 
                 chat_history_str = ""
@@ -309,7 +366,6 @@ if prompt:
                 with concurrent.futures.ThreadPoolExecutor() as executor:
                     future_to_doc = {}
                     for doc_id in selected_doc_ids:
-                        # Find the human-readable name of the Document
                         doc_name = next((v["name"] for k, v in LAW_DOC_MAPPING.items() if v["id"] == doc_id), "Legal Database")
                         future_to_doc[executor.submit(process_law_tree, doc_id, doc_name, smart_query, chat_history_str)] = doc_id
                     
@@ -324,11 +380,9 @@ if prompt:
                 
                 st.write("🧠 Compiling legal response with Gemini...")
                 
-                # Separate text for the LLM Brain and the HTML UI
                 raw_texts = [n["text"] for n in retrieved_nodes]
                 context_text = "\n\n".join(raw_texts) if raw_texts else "No specific statutes retrieved."
                 
-                # Generate the Interactive HTML Tree!
                 html_tree_ui = build_html_tree(retrieved_nodes)
 
                 messages = [SystemMessage(content=SYSTEM_PROMPT)]
@@ -341,7 +395,6 @@ if prompt:
                 
                 status.update(label="Analysis Complete", state="complete", expanded=False)
             
-            # --- Render Output ---
             if smart_query.lower() != prompt.lower():
                 st.caption(f"🔄 *Translated legacy query to modern framework:* {smart_query}")
                 
@@ -357,7 +410,6 @@ if prompt:
             
             st.markdown(answer)
             
-            # Display the new HTML Tree in the Expander
             with st.expander("View Retrieved Legal Statutes"):
                 st.markdown(html_tree_ui, unsafe_allow_html=True)
             
