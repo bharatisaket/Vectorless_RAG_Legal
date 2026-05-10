@@ -119,7 +119,7 @@ def process_law_tree(doc_id, doc_name, user_query, history_str):
             
     return unique_nodes, regex_matched
 
-# --- UPDATE: The Modern Accordion HTML Generator ---
+# --- UPDATE: The Flattened Accordion HTML Generator ---
 def build_html_tree(retrieved_nodes):
     if not retrieved_nodes:
         return "<i>No specific statutes retrieved.</i>"
@@ -133,32 +133,17 @@ def build_html_tree(retrieved_nodes):
         
     html = "<div class='legal-accordion'>"
     for doc, texts in grouped.items():
-        # Act Level (Root Card)
-        html += f"""
-        <details class='act-group' open>
-            <summary class='act-header'>
-                <span class='act-title'>{doc}</span>
-                <span class='chevron'></span>
-            </summary>
-            <div class='act-body'>
-        """
+        # Act Level (Root Card) - Flattened to avoid Markdown code-block rendering
+        html += f"<details class='act-group' open><summary class='act-header'><span class='act-title'>{doc}</span><span class='chevron'></span></summary><div class='act-body'>"
+        
         for text in texts:
             first_line = text.split('\n')[0].strip()
             title = first_line if len(first_line) < 65 else first_line[:65] + "..."
             clean_text = text.replace('\n', '<br>')
             
-            # Section Level (Nested Card)
-            html += f"""
-                <details class='section-item'>
-                    <summary class='section-header'>
-                        <span class='section-title'>{title}</span>
-                        <span class='chevron'></span>
-                    </summary>
-                    <div class='section-text'>
-                        {clean_text}
-                    </div>
-                </details>
-            """
+            # Section Level (Nested Card) - Flattened
+            html += f"<details class='section-item'><summary class='section-header'><span class='section-title'>{title}</span><span class='chevron'></span></summary><div class='section-text'>{clean_text}</div></details>"
+            
         html += "</div></details>"
     html += "</div>"
     return html
