@@ -67,12 +67,13 @@ def expand_query(user_input):
     except:
         return user_input
 
-def process_law_tree(doc_id, user_query, history_str):
+# UPDATE: We now pass doc_name so we know which Act the text belongs to
+def process_law_tree(doc_id, doc_name, user_query, history_str):
     tree_data = legal_trees[doc_id]
     tree_json = tree_data["tree_json"]
     node_mapping = tree_data["mapping"]
     
-    extracted_texts = []
+    extracted_nodes = []
     regex_matched = False
     
     section_targets = re.findall(r'\b\d+[a-zA-Z]?\b', user_query) 
@@ -81,9 +82,8 @@ def process_law_tree(doc_id, user_query, history_str):
             node_text = node_data['text']
             for num in section_targets:
                 if f" {num}." in node_text[:100] or f"Section {num}" in node_text[:100] or node_text.startswith(f"{num}."):
-                    if node_text not in extracted_texts:
-                        extracted_texts.append(node_text)
-                        regex_matched = True
+                    extracted_nodes.append({"doc_name": doc_name, "text": node_text})
+                    regex_matched = True
 
     routing_prompt = f"""
     Analyze the tree and query. Return a valid JSON array of the most relevant node IDs.
@@ -109,68 +109,97 @@ def process_law_tree(doc_id, user_query, history_str):
     for node_id_key in selected_nodes:
         if node_id_key in node_mapping and 'text' in node_mapping[node_id_key]:
             node_text = node_mapping[node_id_key]['text']
-            if node_text not in extracted_texts:
-                extracted_texts.append(node_text)
+            extracted_nodes.append({"doc_name": doc_name, "text": node_text})
             
-    return extracted_texts, regex_matched
+    # Deduplicate nodes to avoid showing the same section twice
+    seen = set()
+    unique_nodes = []
+    for n in extracted_nodes:
+        if n["text"] not in seen:
+            seen.add(n["text"])
+            unique_nodes.append(n)
+            
+    return unique_nodes, regex_matched
+
+# NEW HELPER: Generates the HTML Interactive Tree
+def build_html_tree(retrieved_nodes):
+    if not retrieved_nodes:
+        return "<i>No specific statutes retrieved.</i>"
+        
+    # Group the nodes by their Document Name (Root)
+    grouped = {}
+    for node in retrieved_nodes:
+        doc = node["doc_name"]
+        if doc not in grouped:
+            grouped[doc] = []
+        grouped[doc].append(node["text"])
+        
+    html = "<div class='legal-tree-container'>"
+    for doc, texts in grouped.items():
+        html += f"<details class='tree-doc'><summary>📚 <strong>{doc}</strong></summary><div class='tree-content'>"
+        for text in texts:
+            # Extract a short title (e.g., "Section 63...") from the first line
+            first_line = text.split('\n')[0].strip()
+            title = first_line if len(first_line) < 65 else first_line[:65] + "..."
+            
+            # Preserve formatting for the HTML block
+            clean_text = text.replace('\n', '<br>')
+            html += f"<details class='tree-node'><summary>📄 {title}</summary><div class='tree-text'>{clean_text}</div></details>"
+        html += "</div></details>"
+    html += "</div>"
+    return html
 
 # --- 4. UI Initialization & Styling ---
 st.set_page_config(page_title="LegalEdge India", page_icon="⚖️", layout="wide")
 
-# --- CSS UI UPGRADE (Including New Chat Bubble Styles) ---
+# --- CSS UI UPGRADE (Added Tree Styles) ---
 st.markdown("""
 <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
     
-    html, body, [class*="css"]  {
-        font-family: 'Inter', sans-serif;
-    }
-    
+    html, body, [class*="css"]  { font-family: 'Inter', sans-serif; }
     #MainMenu {visibility: hidden;}
     footer {visibility: hidden;}
     header {visibility: hidden;}
     
     /* SaaS Buttons */
     div.stButton > button {
-        border-radius: 24px;
-        border: 1px solid #E5E7EB;
-        background-color: #FFFFFF;
-        color: #374151;
-        font-weight: 500;
-        transition: all 0.2s ease-in-out;
-        box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+        border-radius: 24px; border: 1px solid #E5E7EB; background-color: #FFFFFF; color: #374151;
+        font-weight: 500; transition: all 0.2s ease-in-out; box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
     }
     div.stButton > button:hover {
-        border-color: #2563EB;
-        color: #2563EB;
-        background-color: #F8FAFC;
-        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
-        transform: translateY(-1px);
+        border-color: #2563EB; color: #2563EB; background-color: #F8FAFC;
+        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1); transform: translateY(-1px);
     }
     
-    /* Distinct Chat Bubbles */
-    [data-testid="stChatMessage"] {
-        border-radius: 12px;
-        padding: 15px;
-        margin-bottom: 20px;
-    }
-    /* AI Assistant Card Styling */
+    /* Chat Bubbles */
+    [data-testid="stChatMessage"] { border-radius: 12px; padding: 15px; margin-bottom: 20px; }
     [data-testid="stChatMessage"]:has([data-testid="chatAvatarIcon-assistant"]) {
-        background-color: #FFFFFF;
-        border: 1px solid #F3F4F6;
-        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+        background-color: #FFFFFF; border: 1px solid #F3F4F6; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
     }
-    /* User Message Styling */
     [data-testid="stChatMessage"]:has([data-testid="chatAvatarIcon-user"]) {
-        background-color: #F8FAFC;
-        border-left: 4px solid #2563EB;
+        background-color: #F8FAFC; border-left: 4px solid #2563EB;
     }
+
+    /* INTERACTIVE HTML TREE CSS */
+    .tree-doc { border: 1px solid #E5E7EB; border-radius: 8px; margin-bottom: 10px; background-color: #FFFFFF; overflow: hidden; }
+    .tree-doc > summary { padding: 12px 15px; background-color: #F8FAFC; cursor: pointer; color: #1F2937; list-style: none; }
+    .tree-doc > summary:hover { background-color: #F1F5F9; }
+    .tree-content { padding: 10px; border-top: 1px solid #E5E7EB; }
+    
+    .tree-node { margin-bottom: 8px; border: 1px solid #F3F4F6; border-radius: 6px; }
+    .tree-node > summary { padding: 10px 12px; font-size: 0.95em; font-weight: 500; background-color: #FFFFFF; cursor: pointer; color: #374151; list-style: none; }
+    .tree-node > summary:hover { background-color: #F9FAFB; }
+    .tree-text { padding: 15px; font-size: 0.9em; color: #4B5563; background-color: #FAFAFA; border-top: 1px solid #F3F4F6; line-height: 1.6; }
+    
+    /* Custom Arrow for Tree */
+    details summary::before { content: '▶'; display: inline-block; margin-right: 10px; font-size: 0.8em; transition: transform 0.2s; color: #9CA3AF; }
+    details[open] > summary::before { transform: rotate(90deg); }
 </style>
 """, unsafe_allow_html=True)
 
 # --- SIDEBAR LOGIC ---
 with st.sidebar:
-    # FEATURE 2: "New Case" Button to clear memory
     if st.button("🗑️ Start New Case", use_container_width=True):
         st.session_state.messages = []
         st.session_state.starter_prompt = None
@@ -219,20 +248,14 @@ if len(st.session_state.messages) == 0:
     st.markdown("<h3 style='text-align: center; color: #374151; padding-bottom: 10px; font-weight: 600;'>Where should we start?</h3>", unsafe_allow_html=True)
     
     col1, col2, col3, col4 = st.columns([1, 1, 1, 1])
-    
     with col1:
-        if st.button("📱 Digital Evidence", use_container_width=True):
-            st.session_state.starter_prompt = "Under the new BSA, what are the strict conditions for submitting WhatsApp chats or electronic records as evidence?"
+        if st.button("📱 Digital Evidence", use_container_width=True): st.session_state.starter_prompt = "Under the new BSA, what are the strict conditions for submitting WhatsApp chats or electronic records as evidence?"
     with col2:
-        if st.button("⚖️ Compare IPC & BNS", use_container_width=True):
-            st.session_state.starter_prompt = "What is the difference between Murder under the old IPC and the new BNS?"
+        if st.button("⚖️ Compare IPC & BNS", use_container_width=True): st.session_state.starter_prompt = "What is the difference between Murder under the old IPC and the new BNS?"
     with col3:
-        if st.button("📖 Explain it Simply", use_container_width=True):
-            st.session_state.starter_prompt = "Explain the rules for electronic evidence (BSA) as if I am a beginner."
+        if st.button("📖 Explain it Simply", use_container_width=True): st.session_state.starter_prompt = "Explain the rules for electronic evidence (BSA) as if I am a beginner."
     with col4:
-        if st.button("🚨 Find Penalties", use_container_width=True):
-            st.session_state.starter_prompt = "What is the specific penalty for mob lynching under the BNS?"
-    
+        if st.button("🚨 Find Penalties", use_container_width=True): st.session_state.starter_prompt = "What is the specific penalty for mob lynching under the BNS?"
     st.markdown("<br>", unsafe_allow_html=True)
 
 # Render chat history
@@ -241,9 +264,9 @@ for message in st.session_state.messages:
         st.markdown(message["content"])
         if "badge" in message and message["badge"]:
             st.success(message["badge"])
-        if "context" in message and message["context"]:
+        if "context_html" in message and message["context_html"]:
             with st.expander("View Retrieved Legal Statutes"):
-                st.markdown(message["context"])
+                st.markdown(message["context_html"], unsafe_allow_html=True)
 
 user_input = st.chat_input("E.g., What is the penalty for IPC 420?")
 prompt = None
@@ -256,7 +279,6 @@ elif user_input:
 
 # --- 5. Main Logic Loop ---
 if prompt:
-    
     if not selected_doc_ids:
         st.warning("⚠️ Please select at least one legal code from the sidebar.")
         st.stop()
@@ -266,20 +288,18 @@ if prompt:
 
     with st.chat_message("assistant"):
         badge_text = None
-        
         try:
             if any(word in prompt.lower() for word in ["recipe", "weather", "movie", "song", "cake"]):
                  st.markdown("I am a specialized Legal AI for the BNS, BSA, and BNSS. I cannot assist with non-legal queries.")
                  st.session_state.messages.append({"role": "assistant", "content": "I am a specialized Legal AI for the BNS, BSA, and BNSS. I cannot assist with non-legal queries."})
                  st.stop()
 
-            # FEATURE 1: The Sleek Expanding Status Widget
             with st.status("Analyzing Legal Context...", expanded=True) as status:
                 st.write("🔍 Translating legacy codes to modern framework...")
                 smart_query = expand_query(prompt)
                 
                 st.write("📚 Searching active legal databases...")
-                retrieved_texts = []
+                retrieved_nodes = [] # Now a list of dicts!
                 direct_match_found = False
                 
                 chat_history_str = ""
@@ -287,12 +307,16 @@ if prompt:
                     chat_history_str += f"{msg['role'].capitalize()}: {msg['content']}\n"
                 
                 with concurrent.futures.ThreadPoolExecutor() as executor:
-                    future_to_doc = {executor.submit(process_law_tree, doc_id, smart_query, chat_history_str): doc_id for doc_id in selected_doc_ids}
+                    future_to_doc = {}
+                    for doc_id in selected_doc_ids:
+                        # Find the human-readable name of the Document
+                        doc_name = next((v["name"] for k, v in LAW_DOC_MAPPING.items() if v["id"] == doc_id), "Legal Database")
+                        future_to_doc[executor.submit(process_law_tree, doc_id, doc_name, smart_query, chat_history_str)] = doc_id
                     
                     for future in concurrent.futures.as_completed(future_to_doc):
                         try:
-                            texts, regex_flag = future.result()
-                            retrieved_texts.extend(texts)
+                            nodes, regex_flag = future.result()
+                            retrieved_nodes.extend(nodes)
                             if regex_flag:
                                 direct_match_found = True
                         except Exception as exc:
@@ -300,18 +324,12 @@ if prompt:
                 
                 st.write("🧠 Compiling legal response with Gemini...")
                 
-                context_text = "\n\n".join(retrieved_texts)
-                if not retrieved_texts:
-                    context_text = "No specific statutes retrieved."
+                # Separate text for the LLM Brain and the HTML UI
+                raw_texts = [n["text"] for n in retrieved_nodes]
+                context_text = "\n\n".join(raw_texts) if raw_texts else "No specific statutes retrieved."
                 
-                formatted_ui_text = ""
-                for text_block in retrieved_texts:
-                    formatted_ui_text += f"> {text_block}\n\n---\n\n"
-                    
-                if len(formatted_ui_text) > 5000:
-                    formatted_ui_text = formatted_ui_text[:5000] + "\n\n*... [Remaining text hidden for UI readability. The AI analyzed the complete legal text.]*"
-                if not retrieved_texts:
-                    formatted_ui_text = "No specific statutes retrieved."
+                # Generate the Interactive HTML Tree!
+                html_tree_ui = build_html_tree(retrieved_nodes)
 
                 messages = [SystemMessage(content=SYSTEM_PROMPT)]
                 for msg in st.session_state.messages[:-1]:
@@ -319,10 +337,8 @@ if prompt:
                     messages.append(role_class(content=msg["content"]))
                 
                 messages.append(HumanMessage(content=f"CONTEXT:\n{context_text}\n\nQUESTION:\n{smart_query}"))
-                
                 final_response = llm.invoke(messages)
                 
-                # Close the status widget smoothly
                 status.update(label="Analysis Complete", state="complete", expanded=False)
             
             # --- Render Output ---
@@ -341,13 +357,14 @@ if prompt:
             
             st.markdown(answer)
             
+            # Display the new HTML Tree in the Expander
             with st.expander("View Retrieved Legal Statutes"):
-                st.markdown(formatted_ui_text)
+                st.markdown(html_tree_ui, unsafe_allow_html=True)
             
             st.session_state.messages.append({
                 "role": "assistant", 
                 "content": answer, 
-                "context": formatted_ui_text,
+                "context_html": html_tree_ui,
                 "badge": badge_text
             })
             
