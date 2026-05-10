@@ -198,30 +198,51 @@ st.markdown("""
     .legal-dir-tree details > summary:hover { background-color: #F1F5F9; }
     .dir-tree-leaf { margin-top: 5px; margin-bottom: 5px; padding: 12px; background-color: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 6px; font-size: 0.85em; color: #475569; line-height: 1.6; max-height: 300px; overflow-y: auto; }
 
-    /* --- CTA PILLS CSS --- */
+    /* --- CTA PILLS CSS (Grid Layout & Restored Size) --- */
     .profile-footer { text-align: center; margin-top: 20px; }
-    .profile-text { font-size: 0.85em; color: #64748B; margin-bottom: 12px; }
-    .social-pills { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; }
+    .profile-text { font-size: 0.9em; color: #64748B; margin-bottom: 12px; }
+    .social-pills { 
+        display: grid; 
+        grid-template-columns: 1fr 1fr; 
+        gap: 8px; 
+    }
     .social-pill {
-        display: inline-flex; align-items: center; gap: 6px;
-        padding: 6px 12px; border-radius: 20px;
-        font-size: 0.75em; font-weight: 600; text-decoration: none;
+        display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+        padding: 8px 12px; border-radius: 8px;
+        font-size: 0.85em; font-weight: 600; text-decoration: none !important;
         color: #475569; background: #FFFFFF; border: 1px solid #E2E8F0;
         transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
     }
-    .social-pill svg { width: 12px; height: 12px; fill: currentColor; }
+    .social-pill svg { width: 14px; height: 14px; fill: currentColor; }
     
     .github-pill:hover { background: #24292E; color: #FFFFFF; border-color: #24292E; transform: translateY(-2px); box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1); }
     .linkedin-pill:hover { background: #0A66C2; color: #FFFFFF; border-color: #0A66C2; transform: translateY(-2px); box-shadow: 0 4px 6px -1px rgba(10, 102, 194, 0.2); }
     .email-pill:hover { background: #EA4335; color: #FFFFFF; border-color: #EA4335; transform: translateY(-2px); box-shadow: 0 4px 6px -1px rgba(234, 67, 53, 0.2); }
     .phone-pill:hover { background: #10B981; color: #FFFFFF; border-color: #10B981; transform: translateY(-2px); box-shadow: 0 4px 6px -1px rgba(16, 185, 129, 0.2); }
 
-    .feedback-link { display: inline-block; margin-top: 12px; font-size: 0.75em; color: #94A3B8; text-decoration: none; transition: color 0.2s; }
-    .feedback-link:hover { color: #3B82F6; text-decoration: underline; }
+    /* --- FEEDBACK LINK CSS --- */
+    .feedback-link { 
+        display: inline-block; 
+        margin-top: 15px; 
+        padding: 8px 16px;
+        border-radius: 6px;
+        background-color: #F1F5F9;
+        font-size: 0.85em; 
+        font-weight: 500;
+        color: #475569; 
+        text-decoration: none !important; 
+        transition: all 0.2s ease; 
+        border: 1px solid transparent;
+    }
+    .feedback-link:hover { 
+        color: #2563EB; 
+        background-color: #EFF6FF;
+        border-color: #BFDBFE;
+    }
 </style>
 """, unsafe_allow_html=True)
 
-# --- SIDEBAR LOGIC (Optimized Spacing) ---
+# --- SIDEBAR LOGIC (Optimized Spacing & UI) ---
 with st.sidebar:
     # Tighter "New Case" button
     if st.button("➕ New Case", use_container_width=True):
@@ -240,11 +261,16 @@ with st.sidebar:
     if bnss_active: selected_doc_ids.append(LAW_DOC_MAPPING["BNSS"]["id"])
     if bsa_active: selected_doc_ids.append(LAW_DOC_MAPPING["BSA"]["id"])
 
-    # Replaced bulky st.warning with a tight HTML disclaimer
-    st.markdown("<hr style='margin: 15px 0; border: 0; border-top: 1px solid #E5E7EB;'>", unsafe_allow_html=True)
-    st.markdown("<p style='font-size: 11px; color: #9CA3AF; line-height: 1.3;'><b>Disclaimer:</b> For informational purposes only. AI can make mistakes, please verify information.</p>", unsafe_allow_html=True)
+    # High-Priority yet space-efficient Custom Disclaimer Alert
+    st.markdown("""
+    <div style="background-color: #FFFBEB; border-left: 4px solid #F59E0B; padding: 12px; margin: 20px 0 10px 0; border-radius: 4px; box-shadow: 0 1px 2px rgba(0,0,0,0.05);">
+        <span style="font-size: 0.85em; color: #92400E; line-height: 1.4; display: block;">
+            <strong>⚠️ Disclaimer:</strong> For informational purposes only. AI can make mistakes, please verify information.
+        </span>
+    </div>
+    """, unsafe_allow_html=True)
     
-    # Pre-filled Developer Block
+    # Pre-filled Developer Block with 2x2 Grid and No-Underline Feedback Link
     st.markdown("""
     <div class='profile-footer'>
         <p class='profile-text'>Built by <strong>Saket</strong></p>
@@ -267,7 +293,7 @@ with st.sidebar:
             </a>
         </div>
         <a href="mailto:bharatisaket@gmail.com?subject=Feedback%20for%20LegalEdge%20India&body=Hi%20Saket%2C%0A%0AHere%20is%20my%20feedback%20on%20LegalEdge%20India%3A%0A%0A1.%20Bug%20%2F%20Legal%20Inaccuracy%20Found%3A%0A%5BDescribe%20issue%20here%5D%0A%0A2.%20Feature%20Request%3A%0A%5BWhat%20should%20be%20added%20next%3F%5D%0A%0A3.%20My%20Role%3A%0A%5BAdvocate%20%2F%20Student%20%2F%20Citizen%5D%0A%0AThanks%21" class='feedback-link'>
-            💡 Share Feedback or Suggestions
+            💡 Suggest an Improvement
         </a>
     </div>
     """, unsafe_allow_html=True)
