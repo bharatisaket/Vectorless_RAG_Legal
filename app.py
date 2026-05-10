@@ -162,9 +162,13 @@ st.markdown("""
     footer {visibility: hidden;}
     header {visibility: hidden;}
     
+    /* GAP OPTIMIZATION: Tighter spacing for sidebar and main elements */
+    [data-testid="stSidebar"] [data-testid="stVerticalBlock"] { gap: 0.5rem; }
+    div.block-container { padding-bottom: 2rem; }
+    
     /* SaaS Buttons */
     div.stButton > button {
-        border-radius: 24px; border: 1px solid #E5E7EB; background-color: #FFFFFF; color: #374151;
+        border-radius: 8px; border: 1px solid #E5E7EB; background-color: #FFFFFF; color: #374151;
         font-weight: 500; transition: all 0.2s ease-in-out; box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
     }
     div.stButton > button:hover {
@@ -173,9 +177,9 @@ st.markdown("""
     }
     
     /* Chat Bubbles */
-    [data-testid="stChatMessage"] { border-radius: 12px; padding: 15px; margin-bottom: 20px; }
+    [data-testid="stChatMessage"] { border-radius: 12px; padding: 15px; margin-bottom: 15px; }
     [data-testid="stChatMessage"]:has([data-testid="chatAvatarIcon-assistant"]) {
-        background-color: #FFFFFF; border: 1px solid #F3F4F6; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+        background-color: #FFFFFF; border: 1px solid #E2E8F0; box-shadow: 0 2px 4px rgba(0,0,0,0.02);
     }
     [data-testid="stChatMessage"]:has([data-testid="chatAvatarIcon-user"]) {
         background-color: #F8FAFC; border-left: 4px solid #2563EB;
@@ -195,7 +199,7 @@ st.markdown("""
     .dir-tree-leaf { margin-top: 5px; margin-bottom: 5px; padding: 12px; background-color: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 6px; font-size: 0.85em; color: #475569; line-height: 1.6; max-height: 300px; overflow-y: auto; }
 
     /* --- CTA PILLS CSS --- */
-    .profile-footer { text-align: center; margin-top: 35px; }
+    .profile-footer { text-align: center; margin-top: 20px; }
     .profile-text { font-size: 0.85em; color: #64748B; margin-bottom: 12px; }
     .social-pills { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; }
     .social-pill {
@@ -212,24 +216,23 @@ st.markdown("""
     .email-pill:hover { background: #EA4335; color: #FFFFFF; border-color: #EA4335; transform: translateY(-2px); box-shadow: 0 4px 6px -1px rgba(234, 67, 53, 0.2); }
     .phone-pill:hover { background: #10B981; color: #FFFFFF; border-color: #10B981; transform: translateY(-2px); box-shadow: 0 4px 6px -1px rgba(16, 185, 129, 0.2); }
 
-    .feedback-link { display: inline-block; margin-top: 18px; font-size: 0.75em; color: #94A3B8; text-decoration: none; transition: color 0.2s; }
+    .feedback-link { display: inline-block; margin-top: 12px; font-size: 0.75em; color: #94A3B8; text-decoration: none; transition: color 0.2s; }
     .feedback-link:hover { color: #3B82F6; text-decoration: underline; }
 </style>
 """, unsafe_allow_html=True)
 
-# --- SIDEBAR LOGIC ---
+# --- SIDEBAR LOGIC (Optimized Spacing) ---
 with st.sidebar:
-    if st.button("🗑️ Start New Case", use_container_width=True):
+    # Tighter "New Case" button
+    if st.button("➕ New Case", use_container_width=True):
         st.session_state.messages = []
         st.session_state.starter_prompt = None
         st.rerun()
         
-    st.markdown("<br>", unsafe_allow_html=True)
-    st.markdown("<h2 style='font-weight: 700; color: #1F2937;'>⚖️ Search Scope</h2>", unsafe_allow_html=True)
-    st.markdown("<p style='color: #6B7280; font-size: 0.9em;'>Toggle active databases for your search:</p>", unsafe_allow_html=True)
+    st.markdown("<h3 style='font-weight: 600; font-size: 16px; color: #1F2937; margin-top: 15px; margin-bottom: 5px;'>⚖️ Search Scope</h3>", unsafe_allow_html=True)
     
     bns_active = st.checkbox("**BNS** (Penal Code)", value=True, help="Bharatiya Nyaya Sanhita")
-    bnss_active = st.checkbox("**BNSS** (Criminal Procedures)", value=True, help="Bharatiya Nagarik Suraksha Sanhita")
+    bnss_active = st.checkbox("**BNSS** (Procedures)", value=True, help="Bharatiya Nagarik Suraksha Sanhita")
     bsa_active = st.checkbox("**BSA** (Evidence Act)", value=True, help="Bharatiya Sakshya Adhiniyam")
     
     selected_doc_ids = []
@@ -237,9 +240,11 @@ with st.sidebar:
     if bnss_active: selected_doc_ids.append(LAW_DOC_MAPPING["BNSS"]["id"])
     if bsa_active: selected_doc_ids.append(LAW_DOC_MAPPING["BSA"]["id"])
 
-    st.divider()
-    st.warning("**Disclaimer:** This tool is for informational purposes only. AI can make mistakes, so please verify important information.")
+    # Replaced bulky st.warning with a tight HTML disclaimer
+    st.markdown("<hr style='margin: 15px 0; border: 0; border-top: 1px solid #E5E7EB;'>", unsafe_allow_html=True)
+    st.markdown("<p style='font-size: 11px; color: #9CA3AF; line-height: 1.3;'><b>Disclaimer:</b> For informational purposes only. AI can make mistakes, please verify information.</p>", unsafe_allow_html=True)
     
+    # Pre-filled Developer Block
     st.markdown("""
     <div class='profile-footer'>
         <p class='profile-text'>Built by <strong>Saket</strong></p>
@@ -256,7 +261,14 @@ with st.sidebar:
                 <svg viewBox="0 0 24 24"><path d="M0 3v18h24v-18h-24zm21.518 2l-9.518 7.713-9.518-7.713h19.036zm-19.518 14v-11.817l10 8.104 10-8.104v11.817h-20z"/></svg>
                 Email
             </a>
+            <a href='tel:+918766623773' class='social-pill phone-pill'>
+                <svg viewBox="0 0 24 24"><path d="M20 22.621l-3.521-6.792c-.008.004-1.974.97-2.064 1.011-2.24 1.086-6.799-7.82-4.609-8.994l2.083-1.026-3.493-6.82c-2.106 1.039-8.938 4.8-6.68 11.225 4.24 12.028 17.027 12.446 20.707 10.113l2.423-1.189-4.846-7.528z"/></svg>
+                Call
+            </a>
         </div>
+        <a href="mailto:bharatisaket@gmail.com?subject=Feedback%20for%20LegalEdge%20India&body=Hi%20Saket%2C%0A%0AHere%20is%20my%20feedback%20on%20LegalEdge%20India%3A%0A%0A1.%20Bug%20%2F%20Legal%20Inaccuracy%20Found%3A%0A%5BDescribe%20issue%20here%5D%0A%0A2.%20Feature%20Request%3A%0A%5BWhat%20should%20be%20added%20next%3F%5D%0A%0A3.%20My%20Role%3A%0A%5BAdvocate%20%2F%20Student%20%2F%20Citizen%5D%0A%0AThanks%21" class='feedback-link'>
+            💡 Share Feedback or Suggestions
+        </a>
     </div>
     """, unsafe_allow_html=True)
 
@@ -401,10 +413,9 @@ if prompt:
             else:
                 st.error(f"Error: {e}")
 
-# --- CASE EXPORT (Minimal HTML Document Style) ---
+# --- CASE EXPORT (Minimal HTML Document Style, Tight Spacing) ---
 if "messages" in st.session_state and len(st.session_state.messages) > 0:
-    st.markdown("<br>", unsafe_allow_html=True)
-    
+    # Build HTML document
     html_export = """
     <html><head><meta charset="utf-8">
     <style>
@@ -418,7 +429,7 @@ if "messages" in st.session_state and len(st.session_state.messages) > 0:
     """
     
     for msg in st.session_state.messages:
-        if "html" not in msg:
+        if "context_html" not in msg: # Safe check to exclude the interactive tree from the doc
             content = msg.get('content', '').replace('\n', '<br>').replace('**', '')
             if msg['role'] == 'user':
                 html_export += f"<div class='user-query'>🧑‍💼 Query: {content}</div>"
@@ -427,7 +438,8 @@ if "messages" in st.session_state and len(st.session_state.messages) > 0:
     
     html_export += "</body></html>"
 
-    col1, col2 = st.columns([6, 2])
+    # Minimal, right-aligned button layout with ZERO vertical padding above it
+    col1, col2 = st.columns([7, 2])
     with col2:
         st.download_button(
             label="📄 Save as Document",
