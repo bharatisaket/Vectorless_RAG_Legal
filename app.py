@@ -17,9 +17,8 @@ except KeyError:
     st.stop()
 
 # Initialize Gemini for blazing fast RAG and routing
-# Using the standard fast tier model for LangChain
 llm = ChatGoogleGenerativeAI(
-    model="gemini-1.5-flash", 
+    model="gemini-3.1-flash-lite", 
     google_api_key=GEMINI_API_KEY,
     temperature=0.1 # Strictly deterministic for legal routing
 )
