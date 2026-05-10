@@ -402,3 +402,25 @@ if prompt:
                 st.warning("⏳ The AI is currently handling too many requests. Please wait a moment and try again.")
             else:
                 st.error(f"Error: {e}")
+
+# --- CASE EXPORT (Main UI) ---
+if "messages" in st.session_state and len(st.session_state.messages) > 0:
+    st.markdown("<br><hr><br>", unsafe_allow_html=True)
+    
+    # Center the button nicely using columns
+    col1, col2, col3 = st.columns([1, 2, 1])
+    with col2:
+        chat_export = "# ⚖️ LegalEdge India - Case Notes\n\n"
+        for msg in st.session_state.messages:
+            # We don't want to export the raw HTML tree, just the text
+            if "html" not in msg: 
+                role = "🧑‍💼 User Query" if msg["role"] == "user" else "🤖 LegalEdge Analysis"
+                chat_export += f"### {role}\n{msg['content']}\n\n---\n\n"
+            
+        st.download_button(
+            label="📄 Download Case Notes",
+            data=chat_export,
+            file_name="LegalEdge_Case_Notes.md",
+            mime="text/markdown",
+            use_container_width=True
+        )
