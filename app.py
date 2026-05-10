@@ -454,7 +454,8 @@ if "messages" in st.session_state and len(st.session_state.messages) > 0:
     <h2>⚖️ LegalEdge India - Official Case Notes</h2>
     """
     
-for msg in st.session_state.messages:
+    # --- FIXED LOOP ---
+    for msg in st.session_state.messages:
         # Just grab the text content, automatically leaving the HTML tree behind!
         content = msg.get('content', '').replace('\n', '<br>').replace('**', '')
         if msg['role'] == 'user':
