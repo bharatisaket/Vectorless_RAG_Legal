@@ -454,13 +454,14 @@ if "messages" in st.session_state and len(st.session_state.messages) > 0:
     <h2>⚖️ LegalEdge India - Official Case Notes</h2>
     """
     
-    for msg in st.session_state.messages:
-        if "context_html" not in msg: # Safe check to exclude the interactive tree from the doc
-            content = msg.get('content', '').replace('\n', '<br>').replace('**', '')
-            if msg['role'] == 'user':
-                html_export += f"<div class='user-query'>🧑‍💼 Query: {content}</div>"
-            else:
-                html_export += f"<div class='ai-response'>🤖 <b>Analysis:</b><br><br>{content}</div><hr>"
+for msg in st.session_state.messages:
+        # Just grab the text content, automatically leaving the HTML tree behind!
+        content = msg.get('content', '').replace('\n', '<br>').replace('**', '')
+        if msg['role'] == 'user':
+            html_export += f"<div class='user-query'>🧑‍💼 Query: {content}</div>"
+        else:
+            html_export += f"<div class='ai-response'>🤖 <b>Analysis:</b><br><br>{content}</div><hr>"
+    # ------------------
     
     html_export += "</body></html>"
 
