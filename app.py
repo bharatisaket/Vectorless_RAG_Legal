@@ -172,10 +172,10 @@ with st.sidebar:
     st.markdown("""
     <div style='text-align: center; margin-top: 50px; font-size: 0.85em; color: #9CA3AF;'>
         <p>Built by <strong>Saket</strong></p>
-        <a href='YOUR_GITHUB_URL' target='_blank' style='text-decoration: none; color: #6B7280; margin-right: 15px;'>
+        <a href='https://github.com/bharatisaket' target='_blank' style='text-decoration: none; color: #6B7280; margin-right: 15px;'>
             🐙 GitHub
         </a>
-        <a href='YOUR_LINKEDIN_URL' target='_blank' style='text-decoration: none; color: #6B7280;'>
+        <a href='https://www.linkedin.com/in/saket-bharati-2a615a148/' target='_blank' style='text-decoration: none; color: #6B7280;'>
             💼 LinkedIn
         </a>
     </div>
