@@ -159,8 +159,8 @@ if len(st.session_state.messages) == 0:
     col1, col2, col3, col4 = st.columns([1, 1, 1, 1])
     
     with col1:
-        if st.button("📝 Draft a Legal Notice", use_container_width=True):
-            st.session_state.starter_prompt = "Draft a formal legal notice based on BNS Section 316 (Cheating)."
+        if st.button("📱 Digital Evidence", use_container_width=True):
+            st.session_state.starter_prompt = "Under the new BSA, what are the strict conditions for submitting WhatsApp chats or electronic records as evidence?"
     with col2:
         if st.button("⚖️ Compare IPC & BNS", use_container_width=True):
             st.session_state.starter_prompt = "What is the difference between Murder under the old IPC and the new BNS?"
