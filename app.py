@@ -71,11 +71,29 @@ def expand_query(user_input):
         return user_input
 
 def process_law_tree(doc_id, user_query, history_str):
-    """Executes parallel tree search. Grabs ALL relevant nodes to give AI full context."""
+    """Executes a Hybrid Search: Deterministic Regex for exact sections + LLM for concepts."""
+    import re
+    
     tree_data = legal_trees[doc_id]
     tree_json = tree_data["tree_json"]
     node_mapping = tree_data["mapping"]
     
+    extracted_texts = []
+    
+    # --- 1. DETERMINISTIC REGEX PRE-FETCHING (The Safety Net) ---
+    # Find any standalone numbers or section codes in the translated query (e.g., "320", "103")
+    section_targets = re.findall(r'\b\d+[a-zA-Z]?\b', user_query) 
+    
+    for node_id, node_data in node_mapping.items():
+        if 'text' in node_data:
+            node_text = node_data['text']
+            # If the node text explicitly starts with or mentions the target section number early on
+            for num in section_targets:
+                if f" {num}." in node_text[:100] or f"Section {num}" in node_text[:100] or node_text.startswith(f"{num}."):
+                    if node_text not in extracted_texts:
+                        extracted_texts.append(node_text)
+
+    # --- 2. CONCEPTUAL LLM SEARCH (The Detective) ---
     routing_prompt = f"""
     Analyze the tree and query. Return a valid JSON array of the most relevant node IDs.
     
@@ -103,11 +121,13 @@ def process_law_tree(doc_id, user_query, history_str):
         except:
             selected_nodes = []
     
-    extracted_texts = []
-    
+    # --- 3. MERGE RESULTS ---
     for node_id in selected_nodes:
         if node_id in node_mapping and 'text' in node_mapping[node_id]:
-            extracted_texts.append(node_mapping[node_id]['text'])
+            node_text = node_mapping[node_id]['text']
+            # Only append if our Regex safety net hasn't already grabbed it
+            if node_text not in extracted_texts:
+                extracted_texts.append(node_text)
             
     return extracted_texts
 
