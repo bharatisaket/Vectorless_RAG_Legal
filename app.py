@@ -50,14 +50,32 @@ def fetch_law_trees():
 
 legal_trees = fetch_law_trees()
 
-# --- 3. PARALLEL ROUTING (NO LIMITS) ---
+# --- 3. HELPER FUNCTIONS ---
+def expand_query(user_input):
+    """Uses Gemini's internal knowledge to translate legacy IPC/CrPC queries to modern Bharatiya codes."""
+    translation_prompt = f"""
+    You are an expert in Indian Criminal Law transitions. India recently replaced the IPC, CrPC, and IEA with the BNS, BNSS, and BSA.
+    
+    TASK: Look at the user's query. If they mention an old section (e.g., IPC 302, IPC 420) or a general crime, seamlessly translate it to reference the NEW 2023 Bharatiya codes. 
+    If no translation is needed, return the original query.
+    
+    CRITICAL: Output ONLY the new query string. No pleasantries. No explanations.
+    
+    User Query: {user_input}
+    Translated Query:"""
+    
+    try:
+        response = llm.invoke(translation_prompt)
+        return response.content.strip()
+    except:
+        return user_input
+
 def process_law_tree(doc_id, user_query, history_str):
-    """Executes tree search. Grabs ALL relevant nodes without starving the AI."""
+    """Executes parallel tree search. Grabs ALL relevant nodes to give AI full context."""
     tree_data = legal_trees[doc_id]
     tree_json = tree_data["tree_json"]
     node_mapping = tree_data["mapping"]
     
-    # UPDATE: Removed the artificial node limits entirely. Just block whole Chapters.
     routing_prompt = f"""
     Analyze the tree and query. Return a valid JSON array of the most relevant node IDs.
     
@@ -87,7 +105,6 @@ def process_law_tree(doc_id, user_query, history_str):
     
     extracted_texts = []
     
-    # UPDATE: Loop through all selected nodes and grab their full text. No budget.
     for node_id in selected_nodes:
         if node_id in node_mapping and 'text' in node_mapping[node_id]:
             extracted_texts.append(node_mapping[node_id]['text'])
@@ -121,7 +138,7 @@ for message in st.session_state.messages:
                 st.markdown(message["context"])
 
 # --- 5. Main Logic Loop ---
-if prompt := st.chat_input("E.g., What is the penalty for mob lynching?"):
+if prompt := st.chat_input("E.g., What is the penalty for IPC 420?"):
     
     if not selected_laws:
         st.warning("⚠️ Please select at least one legal code from the sidebar.")
@@ -134,10 +151,19 @@ if prompt := st.chat_input("E.g., What is the penalty for mob lynching?"):
         message_placeholder = st.empty()
         
         try:
+            # Guardrail for non-legal queries
             if any(word in prompt.lower() for word in ["recipe", "weather", "movie", "song", "cake"]):
                  message_placeholder.markdown("I am a specialized Legal AI for the BNS, BSA, and BNSS. I cannot assist with non-legal queries.")
                  st.session_state.messages.append({"role": "assistant", "content": "I am a specialized Legal AI for the BNS, BSA, and BNSS. I cannot assist with non-legal queries."})
                  st.stop()
+
+            # THE TRANSLATION STEP
+            message_placeholder.markdown("Analyzing legal context...")
+            smart_query = expand_query(prompt)
+            
+            # Show the user if we successfully translated an old IPC code
+            if smart_query.lower() != prompt.lower():
+                st.caption(f"🔄 *Translated legacy query to modern framework:* {smart_query}")
 
             message_placeholder.markdown("Executing Parallel Tree Search...")
             retrieved_texts = []
@@ -149,8 +175,9 @@ if prompt := st.chat_input("E.g., What is the penalty for mob lynching?"):
             
             active_doc_ids = [LAW_DOC_MAPPING[law] for law in selected_laws]
             
+            # Use `smart_query` to search the tree instead of the raw prompt
             with concurrent.futures.ThreadPoolExecutor() as executor:
-                future_to_doc = {executor.submit(process_law_tree, doc_id, prompt, chat_history_str): doc_id for doc_id in active_doc_ids}
+                future_to_doc = {executor.submit(process_law_tree, doc_id, smart_query, chat_history_str): doc_id for doc_id in active_doc_ids}
                 
                 for future in concurrent.futures.as_completed(future_to_doc):
                     try:
@@ -161,12 +188,10 @@ if prompt := st.chat_input("E.g., What is the penalty for mob lynching?"):
             
             message_placeholder.markdown("Reasoning with Gemini...")
             
-            # FULL context goes to the AI
             context_text = "\n\n".join(retrieved_texts)
             if not retrieved_texts:
                 context_text = "No specific statutes retrieved."
             
-            # TRUNCATED context goes to the UI Expander
             ui_display_text = context_text
             if len(ui_display_text) > 5000:
                 ui_display_text = ui_display_text[:5000] + "\n\n***\n*... [Remaining text hidden for UI readability. The AI analyzed the complete legal text.]*"
@@ -175,8 +200,9 @@ if prompt := st.chat_input("E.g., What is the penalty for mob lynching?"):
             for msg in st.session_state.messages[:-1]:
                 role_class = HumanMessage if msg["role"] == "user" else AIMessage
                 messages.append(role_class(content=msg["content"]))
-                    
-            messages.append(HumanMessage(content=f"CONTEXT:\n{context_text}\n\nQUESTION:\n{prompt}"))
+            
+            # Feed the AI the context and the translated smart query
+            messages.append(HumanMessage(content=f"CONTEXT:\n{context_text}\n\nQUESTION:\n{smart_query}"))
             
             final_response = llm.invoke(messages)
             
