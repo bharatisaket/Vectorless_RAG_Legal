@@ -33,20 +33,20 @@ Unlike traditional RAG systems that put PDFs into a meat grinder, chop them into
 1. Clone this repository:
    ```bash
    git clone [https://github.com/YOUR_USERNAME/legaledge-india.git](https://github.com/YOUR_USERNAME/legaledge-india.git)
-   cd legaledge-india```
+   cd legaledge-india
 
 2. Install the required dependencies:
    ```bash
-   pip install -r requirements.txt```
+   pip install -r requirements.txt
    
 3. Configure your API Keys:
    Create a .streamlit/secrets.toml file in the root directory and add your keys:
 ```bash
-PAGEINDEX_API_KEY = "your_pageindex_key_here"
-GEMINI_API_KEY = "your_google_gemini_key_here"
+   PAGEINDEX_API_KEY = "your_pageindex_key_here"
+   GEMINI_API_KEY = "your_google_gemini_key_here"
 
 4. Boot up the engine:
-```bash
+
   streamlit run app.py
  
    
