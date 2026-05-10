@@ -13,7 +13,6 @@ from langchain_core.messages import HumanMessage, SystemMessage, AIMessage
 PAGEINDEX_API_KEY = st.secrets["PAGEINDEX_API_KEY"]
 os.environ["GOOGLE_API_KEY"] = st.secrets["GEMINI_API_KEY"]
 
-# UPDATE: Model changed to gemini-3.1-flash-lite per your specs
 llm = ChatGoogleGenerativeAI(model="gemini-3.1-flash-lite", temperature=0.1)
 
 LAW_DOC_MAPPING = {
@@ -22,11 +21,10 @@ LAW_DOC_MAPPING = {
     "BSA": {"name": "Bharatiya Sakshya Adhiniyam (BSA) - Evidence", "id": "pi-cmoo3z9av011n01qrcozuk72f"}
 }
 
-# --- THE ADAPTIVE SYSTEM PROMPT ---
 SYSTEM_PROMPT = """You are LegalEdge India, an elite Indian Legal AI Assistant. 
 Your primary directive is to provide accurate legal analysis based STRICTLY on the retrieved context. 
 
-DEFAULT STRUCTURE (For general legal questions):
+DEFAULT STRUCTURE:
 1. Executive Summary
 2. Statutory Breakdown (with verbatim quotes)
 3. Summary Table
@@ -57,7 +55,6 @@ legal_trees = fetch_law_trees()
 
 # --- 3. HELPER FUNCTIONS ---
 def expand_query(user_input):
-    """Translates legacy IPC/CrPC queries to modern Bharatiya codes."""
     translation_prompt = f"""
     You are an expert in Indian Criminal Law transitions. India replaced the IPC, CrPC, and IEA with the BNS, BNSS, and BSA.
     TASK: If the user mentions an old section (e.g., IPC 302, IPC 420), translate it to reference the NEW 2023 Bharatiya codes. 
@@ -71,7 +68,6 @@ def expand_query(user_input):
         return user_input
 
 def process_law_tree(doc_id, user_query, history_str):
-    """Executes Hybrid Search (Regex + LLM) and returns (texts, regex_matched_boolean)."""
     tree_data = legal_trees[doc_id]
     tree_json = tree_data["tree_json"]
     node_mapping = tree_data["mapping"]
@@ -79,7 +75,6 @@ def process_law_tree(doc_id, user_query, history_str):
     extracted_texts = []
     regex_matched = False
     
-    # 1. Deterministic Regex Pre-Fetching
     section_targets = re.findall(r'\b\d+[a-zA-Z]?\b', user_query) 
     for node_id_key, node_data in node_mapping.items():
         if 'text' in node_data:
@@ -90,7 +85,6 @@ def process_law_tree(doc_id, user_query, history_str):
                         extracted_texts.append(node_text)
                         regex_matched = True
 
-    # 2. Conceptual LLM Search
     routing_prompt = f"""
     Analyze the tree and query. Return a valid JSON array of the most relevant node IDs.
     CRITICAL RULE: NEVER select parent Chapters. Select ONLY specific Section or Schedule nodes.
@@ -112,7 +106,6 @@ def process_law_tree(doc_id, user_query, history_str):
         except:
             selected_nodes = []
     
-    # 3. Merge Results
     for node_id_key in selected_nodes:
         if node_id_key in node_mapping and 'text' in node_mapping[node_id_key]:
             node_text = node_mapping[node_id_key]['text']
@@ -121,12 +114,47 @@ def process_law_tree(doc_id, user_query, history_str):
             
     return extracted_texts, regex_matched
 
-# --- 4. UI Initialization & Sidebar ---
+# --- 4. UI Initialization & Styling ---
 st.set_page_config(page_title="LegalEdge India", page_icon="⚖️", layout="wide")
 
+# --- CSS UI UPGRADE ---
+st.markdown("""
+<style>
+    /* Import Modern Google Font */
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+    
+    html, body, [class*="css"]  {
+        font-family: 'Inter', sans-serif;
+    }
+    
+    /* Clean up the default Streamlit UI */
+    #MainMenu {visibility: hidden;}
+    footer {visibility: hidden;}
+    header {visibility: hidden;}
+    
+    /* Style the buttons to look like modern SaaS chips */
+    div.stButton > button {
+        border-radius: 24px;
+        border: 1px solid #E5E7EB;
+        background-color: #FFFFFF;
+        color: #374151;
+        font-weight: 500;
+        transition: all 0.2s ease-in-out;
+        box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+    }
+    div.stButton > button:hover {
+        border-color: #2563EB;
+        color: #2563EB;
+        background-color: #F8FAFC;
+        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+        transform: translateY(-1px);
+    }
+</style>
+""", unsafe_allow_html=True)
+
 with st.sidebar:
-    st.header("⚖️ Search Scope")
-    st.markdown("Toggle active databases for your search:")
+    st.markdown("<h2 style='font-weight: 700; color: #1F2937;'>⚖️ Search Scope</h2>", unsafe_allow_html=True)
+    st.markdown("<p style='color: #6B7280; font-size: 0.9em;'>Toggle active databases for your search:</p>", unsafe_allow_html=True)
     
     bns_active = st.checkbox("**BNS** (Penal Code)", value=True, help="Bharatiya Nyaya Sanhita")
     bnss_active = st.checkbox("**BNSS** (Criminal Procedures)", value=True, help="Bharatiya Nagarik Suraksha Sanhita")
@@ -137,25 +165,40 @@ with st.sidebar:
     if bnss_active: selected_doc_ids.append(LAW_DOC_MAPPING["BNSS"]["id"])
     if bsa_active: selected_doc_ids.append(LAW_DOC_MAPPING["BSA"]["id"])
 
-    # THE SOFTER DISCLAIMER
     st.divider()
-    st.warning("**Disclaimer:** This tool is for informational purposes only and is not a substitute for professional legal advice. AI can make mistakes, so please verify important information.")
+    st.warning("**Disclaimer:** This tool is for informational purposes only. AI can make mistakes, so please verify important information.")
+    
+    # --- SUBTLE DEVELOPER SIGNATURE ---
+    st.markdown("""
+    <div style='text-align: center; margin-top: 50px; font-size: 0.85em; color: #9CA3AF;'>
+        <p>Built by <strong>Saket</strong></p>
+        <a href='YOUR_GITHUB_URL' target='_blank' style='text-decoration: none; color: #6B7280; margin-right: 15px;'>
+            🐙 GitHub
+        </a>
+        <a href='YOUR_LINKEDIN_URL' target='_blank' style='text-decoration: none; color: #6B7280;'>
+            💼 LinkedIn
+        </a>
+    </div>
+    """, unsafe_allow_html=True)
 
-st.title("LegalEdge India")
+# Main Header
+st.markdown("<h1 style='font-weight: 800; color: #111827; letter-spacing: -0.02em;'>LegalEdge India</h1>", unsafe_allow_html=True)
 st.markdown("""
-**Your intelligent navigator for India's modern criminal laws.** Seamlessly search across the BNS, BNSS, and BSA. Ask complex legal questions, automatically translate legacy IPC/CrPC sections, and retrieve exact statutory citations in seconds.
-""")
+<p style='font-size: 1.1em; color: #4B5563; margin-bottom: 0;'>
+<strong>Your intelligent navigator for India's modern criminal laws.</strong> Seamlessly search across the BNS, BNSS, and BSA. 
+Ask complex legal questions, automatically translate legacy IPC/CrPC sections, and retrieve exact statutory citations in seconds.
+</p>
+""", unsafe_allow_html=True)
 st.caption("⚙️ *Powered by Vectorless RAG & Gemini Flash Lite*")
 st.divider()
 
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
-# --- NEW: THE EMPTY STATE GREETING & CHIPS ---
+# --- EMPTY STATE GREETING & MODERN CHIPS ---
 if len(st.session_state.messages) == 0:
-    st.markdown("<h3 style='text-align: center; color: #4B4B4B; padding-bottom: 20px;'>Hi! Where should we start?</h3>", unsafe_allow_html=True)
+    st.markdown("<h3 style='text-align: center; color: #374151; padding-bottom: 10px; font-weight: 600;'>Where should we start?</h3>", unsafe_allow_html=True)
     
-    # Create columns for our starter chips
     col1, col2, col3, col4 = st.columns([1, 1, 1, 1])
     
     with col1:
@@ -171,7 +214,7 @@ if len(st.session_state.messages) == 0:
         if st.button("🚨 Find Penalties", use_container_width=True):
             st.session_state.starter_prompt = "What is the specific penalty for mob lynching under the BNS?"
     
-    st.divider()
+    st.markdown("<br>", unsafe_allow_html=True)
 
 # Render chat history
 for message in st.session_state.messages:
@@ -183,14 +226,12 @@ for message in st.session_state.messages:
             with st.expander("View Retrieved Legal Statutes"):
                 st.markdown(message["context"])
 
-# --- INPUT HANDLING LOGIC ---
 user_input = st.chat_input("E.g., What is the penalty for IPC 420?")
 prompt = None
 
-# Check if a chip was clicked, otherwise use the text box
 if "starter_prompt" in st.session_state and st.session_state.starter_prompt is not None:
     prompt = st.session_state.starter_prompt
-    st.session_state.starter_prompt = None # Clear it so it doesn't loop
+    st.session_state.starter_prompt = None 
 elif user_input:
     prompt = user_input
 
