@@ -287,8 +287,8 @@ if len(st.session_state.messages) == 0:
         if st.button("⚖️ Compare IPC & BNS", use_container_width=True): st.session_state.starter_prompt = "What is the difference between Murder under the old IPC and the new BNS?"
     with col3:
         if st.button("📖 Explain it Simply", use_container_width=True): st.session_state.starter_prompt = "Explain the rules for electronic evidence (BSA) as if I am a beginner."
-    with col4:
-        if st.button("🚨 Find Penalties", use_container_width=True): st.session_state.starter_prompt = "What is the specific penalty for mob lynching under the BNS?"
+   with col4:
+        if st.button("🚨 Find Penalties", use_container_width=True): st.session_state.starter_prompt = "What is the penalty for creating a public nuisance under the new BNS?"
     st.markdown("<br>", unsafe_allow_html=True)
 
 # Render chat history
@@ -301,7 +301,7 @@ for message in st.session_state.messages:
             with st.expander("View Retrieved Legal Statutes"):
                 st.markdown(message["context_html"], unsafe_allow_html=True)
 
-user_input = st.chat_input("E.g., What is the penalty for IPC 420?")
+user_input = st.chat_input("E.g., Search for a specific legal section, penalty, or procedure...")
 prompt = None
 
 if "starter_prompt" in st.session_state and st.session_state.starter_prompt is not None:
