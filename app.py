@@ -16,9 +16,9 @@ os.environ["GOOGLE_API_KEY"] = st.secrets["GEMINI_API_KEY"]
 llm = ChatGoogleGenerativeAI(model="gemini-3.1-flash-lite", temperature=0.1)
 
 LAW_DOC_MAPPING = {
-    "BNS": {"name": "Bharatiya Nyaya Sanhita (BNS) - Penal Code", "id": "pi-cmoo3zavg011p01qr7mbgdtev"},
-    "BNSS": {"name": "Bharatiya Nagarik Suraksha Sanhita (BNSS) - Procedures", "id": "pi-cmoo55m2w012301qrevyj12j4"},
-    "BSA": {"name": "Bharatiya Sakshya Adhiniyam (BSA) - Evidence", "id": "pi-cmoo3z9av011n01qrcozuk72f"}
+    "BNS": {"name": "Bharatiya Nyaya Sanhita (BNS)", "id": "pi-cmoo3zavg011p01qr7mbgdtev"},
+    "BNSS": {"name": "Bharatiya Nagarik Suraksha Sanhita (BNSS)", "id": "pi-cmoo55m2w012301qrevyj12j4"},
+    "BSA": {"name": "Bharatiya Sakshya Adhiniyam (BSA)", "id": "pi-cmoo3z9av011n01qrcozuk72f"}
 }
 
 SYSTEM_PROMPT = """You are LegalEdge India, an elite Indian Legal AI Assistant. 
@@ -119,7 +119,7 @@ def process_law_tree(doc_id, doc_name, user_query, history_str):
             
     return unique_nodes, regex_matched
 
-# --- UPDATE: The Authentic Directory Tree HTML Generator ---
+# --- UPDATE: The Modern Accordion HTML Generator ---
 def build_html_tree(retrieved_nodes):
     if not retrieved_nodes:
         return "<i>No specific statutes retrieved.</i>"
@@ -131,31 +131,42 @@ def build_html_tree(retrieved_nodes):
             grouped[doc] = []
         grouped[doc].append(node["text"])
         
-    html = "<ul class='legal-dir-tree'>"
+    html = "<div class='legal-accordion'>"
     for doc, texts in grouped.items():
-        # Root Folder
-        html += f"<li><details open><summary>📁 <strong>{doc}</strong></summary><ul>"
+        # Act Level (Root Card)
+        html += f"""
+        <details class='act-group' open>
+            <summary class='act-header'>
+                <span class='act-title'>{doc}</span>
+                <span class='chevron'></span>
+            </summary>
+            <div class='act-body'>
+        """
         for text in texts:
             first_line = text.split('\n')[0].strip()
             title = first_line if len(first_line) < 65 else first_line[:65] + "..."
             clean_text = text.replace('\n', '<br>')
             
-            # Child File
+            # Section Level (Nested Card)
             html += f"""
-            <li>
-                <details>
-                    <summary>📄 {title}</summary>
-                    <div class='dir-tree-leaf'>{clean_text}</div>
+                <details class='section-item'>
+                    <summary class='section-header'>
+                        <span class='section-title'>{title}</span>
+                        <span class='chevron'></span>
+                    </summary>
+                    <div class='section-text'>
+                        {clean_text}
+                    </div>
                 </details>
-            </li>"""
-        html += "</ul></details></li>"
-    html += "</ul>"
+            """
+        html += "</div></details>"
+    html += "</div>"
     return html
 
 # --- 4. UI Initialization & Styling ---
 st.set_page_config(page_title="LegalEdge India", page_icon="⚖️", layout="wide")
 
-# --- CSS UI UPGRADE (Added Authentic Directory Tree CSS) ---
+# --- CSS UI UPGRADE (Modern Nested Accordion) ---
 st.markdown("""
 <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
@@ -184,74 +195,60 @@ st.markdown("""
         background-color: #F8FAFC; border-left: 4px solid #2563EB;
     }
 
-    /* --- THE DIRECTORY TREE CSS --- */
-    .legal-dir-tree, .legal-dir-tree ul {
-        list-style: none;
-        padding-left: 22px;
-        margin: 0;
+    /* --- THE MODERN ACCORDION CSS --- */
+    .legal-accordion details { margin: 0; padding: 0; }
+    .legal-accordion summary { list-style: none; outline: none; cursor: pointer; user-select: none; }
+    .legal-accordion summary::-webkit-details-marker { display: none; }
+
+    /* Act Group (Outer Card) */
+    .act-group { 
+        margin-bottom: 16px; border: 1px solid #E2E8F0; border-radius: 12px; 
+        background: #FFFFFF; box-shadow: 0 1px 3px rgba(0,0,0,0.05); overflow: hidden; 
     }
-    .legal-dir-tree {
-        padding-left: 0;
+    .act-header { 
+        display: flex; justify-content: space-between; align-items: center; 
+        padding: 16px 20px; background: #F8FAFC; transition: background 0.2s ease; 
     }
-    .legal-dir-tree li {
-        position: relative;
-        padding-top: 5px;
-        padding-bottom: 5px;
+    .act-header:hover { background: #F1F5F9; }
+    details[open] > .act-header { border-bottom: 1px solid #E2E8F0; }
+    .act-title { font-weight: 700; color: #0F172A; font-size: 1.05em; display: flex; align-items: center; gap: 8px; }
+    .act-title::before { content: '🏛️'; }
+
+    /* Section Item (Inner Toggles) */
+    .act-body { padding: 12px; background: #FAFAFA; }
+    .section-item { 
+        margin-bottom: 6px; border: 1px solid transparent; border-radius: 8px; 
+        transition: all 0.2s ease; 
     }
-    /* Draw the vertical and horizontal connector lines */
-    .legal-dir-tree li::before, .legal-dir-tree li::after {
-        content: '';
-        position: absolute;
-        left: -14px;
+    .section-item:hover { 
+        border-color: #CBD5E1; background: #FFFFFF; box-shadow: 0 2px 4px rgba(0,0,0,0.02); 
     }
-    /* Horizontal line pointing to the item */
-    .legal-dir-tree li::before {
-        border-top: 1px solid #CBD5E1; /* Light grey connecting line */
-        top: 20px; 
-        width: 12px;
-        height: 0;
+    .section-header { 
+        display: flex; justify-content: space-between; align-items: center; 
+        padding: 12px 16px; border-radius: 8px; transition: background 0.2s; 
     }
-    /* Vertical line dropping down from the parent */
-    .legal-dir-tree li::after {
-        border-left: 1px solid #CBD5E1; 
-        height: 100%;
-        width: 0px;
-        top: -5px;
+    .section-title { font-weight: 600; color: #334155; font-size: 0.95em; display: flex; align-items: center; gap: 8px; }
+    .section-title::before { content: '📄'; opacity: 0.8; font-size: 1.1em;}
+
+    /* The Legal Text Inset */
+    .section-text { 
+        margin: 4px 16px 16px 16px; padding: 16px 20px; background: #FFFFFF; 
+        border-left: 3px solid #3B82F6; border-radius: 0 8px 8px 0; 
+        color: #475569; font-size: 0.9em; line-height: 1.7; 
+        box-shadow: inset 0 0 0 1px #F1F5F9; max-height: 400px; overflow-y: auto; 
     }
-    /* Stop the vertical line on the last item so it doesn't hang down */
-    .legal-dir-tree ul > li:last-child::after {
-        height: 25px; 
+
+    /* Animated Chevrons */
+    .chevron { 
+        width: 20px; height: 20px; display: inline-flex; align-items: center; justify-content: center; 
+        transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1); 
     }
-    /* Hide the default triangle arrow on details summary */
-    .legal-dir-tree details > summary::-webkit-details-marker {
-        display: none;
+    .chevron::after { 
+        content: ''; width: 7px; height: 7px; border-right: 2px solid #94A3B8; border-bottom: 2px solid #94A3B8; 
+        transform: rotate(45deg); margin-bottom: 4px; transition: border-color 0.2s; 
     }
-    .legal-dir-tree details > summary {
-        list-style: none; /* For newer browsers to hide the arrow */
-        cursor: pointer;
-        padding: 5px 8px;
-        border-radius: 4px;
-        font-size: 0.95em;
-        color: #374151;
-        transition: background-color 0.2s;
-    }
-    .legal-dir-tree details > summary:hover {
-        background-color: #F1F5F9;
-    }
-    /* The actual text content inside the file */
-    .dir-tree-leaf {
-        margin-top: 5px;
-        margin-bottom: 5px;
-        padding: 12px;
-        background-color: #F8FAFC;
-        border: 1px solid #E2E8F0;
-        border-radius: 6px;
-        font-size: 0.85em;
-        color: #475569;
-        line-height: 1.6;
-        max-height: 300px;
-        overflow-y: auto;
-    }
+    .act-header:hover .chevron::after, .section-header:hover .chevron::after { border-color: #3B82F6; }
+    details[open] > summary .chevron { transform: rotate(225deg); margin-top: 5px; }
 </style>
 """, unsafe_allow_html=True)
 
