@@ -439,9 +439,46 @@ if prompt:
             else:
                 st.error(f"Error: {e}")
 
-# --- CASE EXPORT (Minimal HTML Document Style, Tight Spacing) ---
+# --- 6. CASE EXPORT (Custom Markdown Table Parser built-in) ---
+def format_export_content(text):
+    """Converts AI Markdown (including tables) into beautifully styled HTML for the download."""
+    text = re.sub(r'\*\*(.*?)\*\*', r'<b>\1</b>', text) # Handle bolding
+    
+    lines = text.split('\n')
+    html_lines = []
+    in_table = False
+    
+    for line in lines:
+        if line.strip().startswith('|') and line.strip().endswith('|'):
+            # Detect Markdown Table Separator (e.g., |:---|---|) and skip it
+            if '---' in line:
+                continue
+            
+            cells = [c.strip() for c in line.strip()[1:-1].split('|')]
+            
+            if not in_table: # Start Table
+                html_lines.append('<table style="width: 100%; border-collapse: collapse; margin: 20px 0; font-size: 14px;">')
+                html_lines.append('<tr>' + ''.join([f'<th style="border: 1px solid #E2E8F0; padding: 10px; background: #F8FAFC; text-align: left; color: #1E293B;">{c}</th>' for c in cells]) + '</tr>')
+                in_table = True
+            else: # Table Rows
+                html_lines.append('<tr>' + ''.join([f'<td style="border: 1px solid #E2E8F0; padding: 10px; color: #334155;">{c}</td>' for c in cells]) + '</tr>')
+        else:
+            if in_table: # Close table if markdown table ends
+                html_lines.append('</table>')
+                in_table = False
+            
+            if line.strip() == "":
+                html_lines.append("<br>")
+            else:
+                html_lines.append(line + "<br>")
+                
+    if in_table:
+        html_lines.append('</table>')
+        
+    return "".join(html_lines)
+
+
 if "messages" in st.session_state and len(st.session_state.messages) > 0:
-    # Build HTML document
     html_export = """
     <html><head><meta charset="utf-8">
     <style>
@@ -454,19 +491,17 @@ if "messages" in st.session_state and len(st.session_state.messages) > 0:
     <h2>⚖️ LegalEdge India - Official Case Notes</h2>
     """
     
-    # --- FIXED LOOP ---
+    # Generate the Export Document using the custom formatter
     for msg in st.session_state.messages:
-        # Just grab the text content, automatically leaving the HTML tree behind!
-        content = msg.get('content', '').replace('\n', '<br>').replace('**', '')
+        formatted_content = format_export_content(msg.get('content', ''))
+        
         if msg['role'] == 'user':
-            html_export += f"<div class='user-query'>🧑‍💼 Query: {content}</div>"
+            html_export += f"<div class='user-query'>🧑‍💼 Query: {formatted_content}</div>"
         else:
-            html_export += f"<div class='ai-response'>🤖 <b>Analysis:</b><br><br>{content}</div><hr>"
-    # ------------------
+            html_export += f"<div class='ai-response'>🤖 <b>Analysis:</b><br><br>{formatted_content}</div><hr>"
     
     html_export += "</body></html>"
 
-    # Minimal, right-aligned button layout with ZERO vertical padding above it
     col1, col2 = st.columns([7, 2])
     with col2:
         st.download_button(
