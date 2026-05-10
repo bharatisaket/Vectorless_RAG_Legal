@@ -217,7 +217,20 @@ with st.sidebar:
         st.session_state.messages = []
         st.session_state.starter_prompt = None
         st.rerun()
-        
+    # --- EXPORT FEATURE ---
+    if len(st.session_state.messages) > 0:
+        chat_export = "# ⚖️ LegalEdge India - Case Notes\n\n"
+        for msg in st.session_state.messages:
+            role = "🧑‍💼 User Query" if msg["role"] == "user" else "🤖 LegalEdge Analysis"
+            chat_export += f"### {role}\n{msg['content']}\n\n---\n\n"
+            
+        st.download_button(
+            label="📄 Download Case Notes",
+            data=chat_export,
+            file_name="LegalEdge_Case_Notes.md",
+            mime="text/markdown",
+            use_container_width=True
+        )    
     st.markdown("<br>", unsafe_allow_html=True)
     st.markdown("<h2 style='font-weight: 700; color: #1F2937;'>⚖️ Search Scope</h2>", unsafe_allow_html=True)
     st.markdown("<p style='color: #6B7280; font-size: 0.9em;'>Toggle active databases for your search:</p>", unsafe_allow_html=True)
